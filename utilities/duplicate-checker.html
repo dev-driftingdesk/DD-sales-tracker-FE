@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product ID Duplicate Checker</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .section {
+            margin-bottom: 30px;
+        }
+        .section h2 {
+            color: #333;
+            border-bottom: 2px solid #e5e5e5;
+            padding-bottom: 10px;
+        }
+        .status {
+            padding: 12px;
+            border-radius: 6px;
+            margin: 10px 0;
+            font-weight: 500;
+        }
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .product-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #e5e5e5;
+            border-radius: 4px;
+            padding: 10px;
+            background-color: #f8f9fa;
+        }
+        .product-item {
+            padding: 8px;
+            border-bottom: 1px solid #e5e5e5;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 12px;
+        }
+        .product-item:last-child {
+            border-bottom: none;
+        }
+        .duplicate {
+            background-color: #ffebee;
+            border-left: 4px solid #f44336;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .clear-btn {
+            background-color: #dc3545;
+        }
+        .clear-btn:hover {
+            background-color: #c82333;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+            border-left: 4px solid #007bff;
+        }
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .stat-label {
+            font-size: 14px;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Product ID Duplicate Checker</h1>
+        <p>This tool checks for duplicate product IDs in both CRM and POS stores</p>
+        <button onclick="runAnalysis()">🔍 Run Analysis</button>
+        <button onclick="clearAllData()" class="clear-btn">🗑️ Clear All Data</button>
+        <button onclick="exportResults()">📁 Export Results</button>
+    </div>
+
+    <div id="results"></div>
+
+    <script>
+        function runAnalysis() {
+            const results = document.getElementById('results');
+            results.innerHTML = '';
+
+            try {
+                // Get data from localStorage
+                const crmData = JSON.parse(localStorage.getItem('crm-core-storage') || '{"state":{"products":[]}}');
+                const posData = JSON.parse(localStorage.getItem('pos-storage') || '{"state":{"products":[]}}');
+                
+                const crmProducts = crmData.state?.products || [];
+                const posProducts = posData.state?.products || [];
+                
+                // Extract IDs
+                const crmIds = crmProducts.map(p => p.id);
+                const posIds = posProducts.map(p => p.id);
+                
+                // Find duplicates
+                const crmDuplicateIds = crmIds.filter((id, index) => crmIds.indexOf(id) !== index);
+                const posDuplicateIds = posIds.filter((id, index) => posIds.indexOf(id) !== index);
+                const crossDuplicates = crmIds.filter(id => posIds.includes(id));
+                
+                // Generate report
+                generateReport({
+                    crmProducts,
+                    posProducts,
+                    crmIds,
+                    posIds,
+                    crmDuplicateIds,
+                    posDuplicateIds,
+                    crossDuplicates
+                });
+                
+            } catch (error) {
+                results.innerHTML = `
+                    <div class="container">
+                        <div class="status error">
+                            <strong>Error:</strong> ${error.message}
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        function generateReport(data) {
+            const { crmProducts, posProducts, crmIds, posIds, crmDuplicateIds, posDuplicateIds, crossDuplicates } = data;
+            const results = document.getElementById('results');
+            
+            let html = '';
+            
+            // Statistics
+            html += `
+                <div class="container">
+                    <div class="section">
+                        <h2>📊 Statistics</h2>
+                        <div class="stats">
+                            <div class="stat-card">
+                                <div class="stat-number">${crmProducts.length}</div>
+                                <div class="stat-label">CRM Products</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number">${posProducts.length}</div>
+                                <div class="stat-label">POS Products</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number">${crmDuplicateIds.length}</div>
+                                <div class="stat-label">CRM Duplicates</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number">${posDuplicateIds.length}</div>
+                                <div class="stat-label">POS Duplicates</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number">${crossDuplicates.length}</div>
+                                <div class="stat-label">Cross-Store Duplicates</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Duplicate Analysis
+            html += `
+                <div class="container">
+                    <div class="section">
+                        <h2>🔍 Duplicate Analysis</h2>
+            `;
+            
+            if (crmDuplicateIds.length === 0 && posDuplicateIds.length === 0 && crossDuplicates.length === 0) {
+                html += `
+                    <div class="status success">
+                        ✅ No duplicate product IDs found! All IDs are unique.
+                    </div>
+                `;
+            } else {
+                if (crmDuplicateIds.length > 0) {
+                    html += `
+                        <div class="status error">
+                            ❌ CRM Store has ${crmDuplicateIds.length} duplicate ID(s): ${crmDuplicateIds.join(', ')}
+                        </div>
+                    `;
+                }
+                
+                if (posDuplicateIds.length > 0) {
+                    html += `
+                        <div class="status error">
+                            ❌ POS Store has ${posDuplicateIds.length} duplicate ID(s): ${posDuplicateIds.join(', ')}
+                        </div>
+                    `;
+                }
+                
+                if (crossDuplicates.length > 0) {
+                    html += `
+                        <div class="status warning">
+                            ⚠️ Cross-store duplicates found: ${crossDuplicates.join(', ')}
+                        </div>
+                    `;
+                }
+            }
+            
+            html += '</div></div>';
+            
+            // ID Generation Analysis
+            html += `
+                <div class="container">
+                    <div class="section">
+                        <h2>🔧 ID Generation Analysis</h2>
+                        <div class="status info">
+                            <strong>CRM Store Pattern:</strong> Uses Date.now() + random string (e.g., "1234567890-abc123def")<br>
+                            <strong>Risk Level:</strong> Very Low - Excellent collision resistance
+                        </div>
+                        <div class="status warning">
+                            <strong>POS Store Pattern:</strong> Uses Date.now().toString() only (e.g., "1234567890")<br>
+                            <strong>Risk Level:</strong> Medium - Potential for collisions if products added rapidly
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // CRM Products
+            if (crmProducts.length > 0) {
+                html += `
+                    <div class="container">
+                        <div class="section">
+                            <h2>📦 CRM Products (${crmProducts.length})</h2>
+                            <div class="product-list">
+                `;
+                
+                crmProducts.forEach(product => {
+                    const isDuplicate = crmDuplicateIds.includes(product.id);
+                    html += `
+                        <div class="product-item ${isDuplicate ? 'duplicate' : ''}">
+                            ID: ${product.id} | Name: ${product.name} | SKU: ${product.sku || 'N/A'}
+                            ${isDuplicate ? ' <strong>[DUPLICATE]</strong>' : ''}
+                        </div>
+                    `;
+                });
+                
+                html += '</div></div></div>';
+            }
+            
+            // POS Products
+            if (posProducts.length > 0) {
+                html += `
+                    <div class="container">
+                        <div class="section">
+                            <h2>🏪 POS Products (${posProducts.length})</h2>
+                            <div class="product-list">
+                `;
+                
+                posProducts.forEach(product => {
+                    const isDuplicate = posDuplicateIds.includes(product.id);
+                    html += `
+                        <div class="product-item ${isDuplicate ? 'duplicate' : ''}">
+                            ID: ${product.id} | Name: ${product.name} | SKU: ${product.sku || 'N/A'}
+                            ${isDuplicate ? ' <strong>[DUPLICATE]</strong>' : ''}
+                        </div>
+                    `;
+                });
+                
+                html += '</div></div></div>';
+            }
+            
+            // Recommendations
+            html += `
+                <div class="container">
+                    <div class="section">
+                        <h2>💡 Recommendations</h2>
+                        <div class="status info">
+                            <strong>If duplicates found:</strong><br>
+                            1. Clear localStorage data and reload the application<br>
+                            2. Check if products are being added too rapidly<br>
+                            3. Consider implementing a delay between rapid additions
+                        </div>
+                        <div class="status info">
+                            <strong>For better ID generation:</strong><br>
+                            1. Update POS store to use CRM-style ID generation<br>
+                            2. Consider using a UUID library for guaranteed uniqueness<br>
+                            3. Add collision detection and retry logic
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            results.innerHTML = html;
+        }
+
+        function clearAllData() {
+            if (confirm('This will clear ALL stored data (products, transactions, etc.). Are you sure?')) {
+                localStorage.removeItem('crm-core-storage');
+                localStorage.removeItem('pos-storage');
+                document.getElementById('results').innerHTML = `
+                    <div class="container">
+                        <div class="status success">
+                            ✅ All data cleared successfully! Reload the application to start fresh.
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        function exportResults() {
+            try {
+                const crmData = JSON.parse(localStorage.getItem('crm-core-storage') || '{"state":{"products":[]}}');
+                const posData = JSON.parse(localStorage.getItem('pos-storage') || '{"state":{"products":[]}}');
+                
+                const exportData = {
+                    timestamp: new Date().toISOString(),
+                    crmProducts: crmData.state?.products || [],
+                    posProducts: posData.state?.products || [],
+                    analysis: {
+                        crmProductCount: (crmData.state?.products || []).length,
+                        posProductCount: (posData.state?.products || []).length,
+                        crmIds: (crmData.state?.products || []).map(p => p.id),
+                        posIds: (posData.state?.products || []).map(p => p.id)
+                    }
+                };
+                
+                const dataStr = JSON.stringify(exportData, null, 2);
+                const dataBlob = new Blob([dataStr], {type: 'application/json'});
+                const url = URL.createObjectURL(dataBlob);
+                
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `product-analysis-${new Date().toISOString().split('T')[0]}.json`;
+                link.click();
+                
+                URL.revokeObjectURL(url);
+            } catch (error) {
+                alert('Error exporting data: ' + error.message);
+            }
+        }
+
+        // Auto-run analysis on page load
+        window.addEventListener('load', runAnalysis);
+    </script>
+</body>
+</html>

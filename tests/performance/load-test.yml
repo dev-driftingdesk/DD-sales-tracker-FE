@@ -1,0 +1,402 @@
+# Artillery Load Testing Configuration for SalesTracker CRM
+config:
+  target: 'http://localhost:3001'
+  phases:
+    # Warm-up phase
+    - duration: 60
+      arrivalRate: 5
+      name: "Warm-up"
+    
+    # Load testing phase
+    - duration: 300
+      arrivalRate: 20
+      name: "Load test"
+    
+    # Stress testing phase  
+    - duration: 120
+      arrivalRate: 50
+      name: "Stress test"
+      
+    # Sustained load phase
+    - duration: 600
+      arrivalRate: 30
+      name: "Sustained load"
+
+  processor: "./load-test-processor.js"
+  
+  # Environment variables
+  environments:
+    test:
+      target: 'http://localhost:3001'
+      phases:
+        - duration: 60
+          arrivalRate: 10
+    staging:
+      target: 'http://staging-api.salestracker.com'
+      phases:
+        - duration: 300
+          arrivalRate: 25
+    production:
+      target: 'http://api.salestracker.com'
+      phases:
+        - duration: 600
+          arrivalRate: 50
+
+  # Performance thresholds
+  ensure:
+    thresholds:
+      - http.response_time.p95: 200
+      - http.response_time.p99: 500
+      - http.response_time.max: 1000
+      - http.request_rate: 25
+      - http.codes.200: 95
+      - http.codes.201: 3
+      - http.codes.4xx: 0.1
+      - http.codes.5xx: 0.01
+
+  # HTTP configuration
+  http:
+    timeout: 10
+    pool: 25
+    maxSockets: 25
+
+  # Payload configuration
+  payload:
+    path: "./test-data.csv"
+    fields:
+      - "email"
+      - "companyName" 
+      - "contactName"
+      - "phone"
+      - "dealValue"
+    cast: false
+    skipHeader: true
+
+scenarios:
+  # Authentication workflow
+  - name: "Authentication Flow"
+    weight: 15
+    flow:
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "test-user@example.com"
+            password: "TestPassword123!"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+          expect:
+            - statusCode: 200
+            - hasProperty: "token"
+
+      - get:
+          url: "/api/users/me"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: 200
+
+      - post:
+          url: "/api/auth/logout"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: 200
+
+  # Lead management workflow
+  - name: "Lead Management"
+    weight: 35
+    flow:
+      # Login
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "sales-rep@example.com"
+            password: "SalesRep123!"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+
+      # Create lead
+      - post:
+          url: "/api/leads"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          json:
+            companyName: "{{ companyName }}"
+            contactName: "{{ contactName }}"
+            email: "{{ email }}"
+            phone: "{{ phone }}"
+            source: "website"
+            status: "new"
+            dealValue: "{{ dealValue }}"
+          capture:
+            - json: "$.data.id"
+              as: "leadId"
+          expect:
+            - statusCode: 201
+
+      # Get lead
+      - get:
+          url: "/api/leads/{{ leadId }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: 200
+
+      # Update lead
+      - patch:
+          url: "/api/leads/{{ leadId }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          json:
+            status: "contacted"
+            notes: "Initial contact made via phone"
+          expect:
+            - statusCode: 200
+
+      # Add activity
+      - post:
+          url: "/api/leads/{{ leadId }}/activities"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          json:
+            type: "call"
+            title: "Follow-up call"
+            description: "Discussed product requirements and pricing"
+            outcome: "positive"
+            duration: 25
+          expect:
+            - statusCode: 201
+
+      # Get lead activities
+      - get:
+          url: "/api/leads/{{ leadId }}/activities"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: 200
+
+  # CRM entities workflow
+  - name: "CRM Operations"
+    weight: 25
+    flow:
+      # Login
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "manager@example.com" 
+            password: "Manager123!"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+
+      # Create company
+      - post:
+          url: "/api/companies"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          json:
+            name: "{{ companyName }}"
+            industry: "Technology"
+            size: "51-200"
+            location: "San Francisco, USA"
+            website: "https://example.com"
+          capture:
+            - json: "$.data.id"
+              as: "companyId"
+          expect:
+            - statusCode: 201
+
+      # Create contact
+      - post:
+          url: "/api/contacts"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          json:
+            firstName: "John"
+            lastName: "Doe"
+            email: "{{ email }}"
+            phone: "{{ phone }}"
+            title: "CEO"
+            companyId: "{{ companyId }}"
+          capture:
+            - json: "$.data.id"
+              as: "contactId"
+          expect:
+            - statusCode: 201
+
+      # Create deal
+      - post:
+          url: "/api/deals"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          json:
+            title: "Enterprise Software Deal"
+            description: "Large enterprise software implementation"
+            value: "{{ dealValue }}"
+            stage: "prospecting"
+            probability: 25
+            expectedCloseDate: "2024-12-31"
+            contactId: "{{ contactId }}"
+            companyId: "{{ companyId }}"
+          capture:
+            - json: "$.data.id"
+              as: "dealId"
+          expect:
+            - statusCode: 201
+
+      # Update deal stage
+      - patch:
+          url: "/api/deals/{{ dealId }}/stage"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          json:
+            stage: "qualification"
+          expect:
+            - statusCode: 200
+
+      # Get deal details
+      - get:
+          url: "/api/deals/{{ dealId }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: 200
+
+  # Analytics and reporting
+  - name: "Analytics Queries"
+    weight: 15
+    flow:
+      # Login
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "analyst@example.com"
+            password: "Analyst123!"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+
+      # Dashboard metrics
+      - get:
+          url: "/api/analytics/dashboard"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          qs:
+            timeframe: "30d"
+          expect:
+            - statusCode: 200
+
+      # Lead conversion metrics
+      - get:
+          url: "/api/analytics/leads/conversion"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          qs:
+            timeframe: "90d"
+          expect:
+            - statusCode: 200
+
+      # Sales pipeline analysis
+      - get:
+          url: "/api/analytics/deals/pipeline"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          qs:
+            groupBy: "stage"
+          expect:
+            - statusCode: 200
+
+      # Performance metrics
+      - get:
+          url: "/api/analytics/performance"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          qs:
+            timeframe: "30d"
+            assignedTo: "all"
+          expect:
+            - statusCode: 200
+
+      # Revenue forecast
+      - get:
+          url: "/api/analytics/forecast"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          qs:
+            period: "quarter"
+          expect:
+            - statusCode: 200
+
+  # Search and filtering
+  - name: "Search Operations"
+    weight: 10
+    flow:
+      # Login
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "user@example.com"
+            password: "User123!"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+
+      # Search leads
+      - get:
+          url: "/api/leads"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          qs:
+            search: "{{ companyName }}"
+            limit: 20
+          expect:
+            - statusCode: 200
+
+      # Filter leads by status
+      - get:
+          url: "/api/leads"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          qs:
+            status: "qualified"
+            sort: "dealValue"
+            order: "desc"
+          expect:
+            - statusCode: 200
+
+      # Search contacts  
+      - get:
+          url: "/api/contacts"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          qs:
+            search: "{{ contactName }}"
+            page: 1
+            limit: 25
+          expect:
+            - statusCode: 200
+
+      # Filter deals
+      - get:
+          url: "/api/deals"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          qs:
+            stage: "proposal"
+            minValue: 10000
+            sort: "expectedCloseDate"
+          expect:
+            - statusCode: 200
+
+      # Global search
+      - get:
+          url: "/api/search/global"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          qs:
+            q: "{{ email }}"
+            types: "leads,contacts,companies"
+          expect:
+            - statusCode: 200

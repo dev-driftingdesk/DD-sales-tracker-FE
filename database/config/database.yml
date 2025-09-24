@@ -1,0 +1,153 @@
+# =====================================================
+# SalesTracker CRM Database Configuration
+# =====================================================
+# Environment-specific database configurations
+# Supports development, test, staging, and production
+# =====================================================
+
+# Default connection settings
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 20 } %>
+  timeout: 5000
+  connect_timeout: 10
+  checkout_timeout: 5
+  
+  # Performance settings
+  prepared_statements: true
+  advisory_locks: true
+  
+  # Connection pool settings
+  reaping_frequency: 10
+  idle_timeout: 300
+  
+  # Statement timeout (30 seconds)
+  variables:
+    statement_timeout: 30000
+    lock_timeout: 10000
+    idle_in_transaction_session_timeout: 60000
+
+# Development environment
+development:
+  <<: *default
+  database: salestracker_development
+  username: <%= ENV['DB_USERNAME'] || 'salestracker_dev' %>
+  password: <%= ENV['DB_PASSWORD'] || 'dev_password_123' %>
+  host: <%= ENV['DB_HOST'] || 'localhost' %>
+  port: <%= ENV['DB_PORT'] || 5432 %>
+  
+  # Development-specific settings
+  pool: 10
+  min_messages: warning
+  
+  # Enable query logging in development
+  log_statement: all
+  log_min_duration_statement: 100
+
+# Test environment
+test:
+  <<: *default
+  database: salestracker_test_<%= ENV['TEST_ENV_NUMBER'] %>
+  username: <%= ENV['DB_USERNAME'] || 'salestracker_test' %>
+  password: <%= ENV['DB_PASSWORD'] || 'test_password_123' %>
+  host: <%= ENV['DB_HOST'] || 'localhost' %>
+  port: <%= ENV['DB_PORT'] || 5432 %>
+  
+  # Test-specific settings
+  pool: 5
+  min_messages: error
+  
+  # Disable logging in test
+  log_statement: none
+
+# Staging environment
+staging:
+  <<: *default
+  database: <%= ENV['DATABASE_NAME'] || 'salestracker_staging' %>
+  username: <%= ENV['DATABASE_USERNAME'] %>
+  password: <%= ENV['DATABASE_PASSWORD'] %>
+  host: <%= ENV['DATABASE_HOST'] %>
+  port: <%= ENV['DATABASE_PORT'] || 5432 %>
+  
+  # Production-like settings for staging
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 15 } %>
+  
+  # SSL configuration for cloud databases
+  sslmode: <%= ENV['DATABASE_SSL_MODE'] || 'require' %>
+  sslcert: <%= ENV['DATABASE_SSL_CERT'] %>
+  sslkey: <%= ENV['DATABASE_SSL_KEY'] %>
+  sslrootcert: <%= ENV['DATABASE_SSL_ROOT_CERT'] %>
+  
+  # Connection validation
+  validate_connection: true
+  
+  # Performance monitoring
+  variables:
+    shared_preload_libraries: 'pg_stat_statements'
+    log_statement: 'mod'
+    log_min_duration_statement: 500
+
+# Production environment
+production:
+  <<: *default
+  database: <%= ENV['DATABASE_NAME'] %>
+  username: <%= ENV['DATABASE_USERNAME'] %>
+  password: <%= ENV['DATABASE_PASSWORD'] %>
+  host: <%= ENV['DATABASE_HOST'] %>
+  port: <%= ENV['DATABASE_PORT'] || 5432 %>
+  
+  # Production pool settings
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 25 } %>
+  
+  # SSL is required in production
+  sslmode: require
+  sslcert: <%= ENV['DATABASE_SSL_CERT'] %>
+  sslkey: <%= ENV['DATABASE_SSL_KEY'] %>
+  sslrootcert: <%= ENV['DATABASE_SSL_ROOT_CERT'] %>
+  
+  # Connection management
+  validate_connection: true
+  reconnect: true
+  
+  # Performance and monitoring
+  variables:
+    shared_preload_libraries: 'pg_stat_statements,auto_explain'
+    log_statement: 'ddl'
+    log_min_duration_statement: 1000
+    auto_explain.log_min_duration: 2000
+    auto_explain.log_analyze: true
+    auto_explain.log_verbose: true
+    
+  # Connection retry settings
+  retry_on:
+    - ActiveRecord::ConnectionNotEstablished
+    - PG::ConnectionBad
+    - PG::UnableToSend
+  
+  retry_attempts: 3
+  retry_delay: 1
+
+# Read replica configuration (for production scaling)
+production_replica:
+  <<: *default
+  database: <%= ENV['DATABASE_NAME'] %>
+  username: <%= ENV['DATABASE_REPLICA_USERNAME'] || ENV['DATABASE_USERNAME'] %>
+  password: <%= ENV['DATABASE_REPLICA_PASSWORD'] || ENV['DATABASE_PASSWORD'] %>
+  host: <%= ENV['DATABASE_REPLICA_HOST'] %>
+  port: <%= ENV['DATABASE_REPLICA_PORT'] || 5432 %>
+  
+  # Read-only configuration
+  pool: <%= ENV.fetch("REPLICA_MAX_THREADS") { 15 } %>
+  replica: true
+  
+  # SSL configuration
+  sslmode: require
+  sslcert: <%= ENV['DATABASE_SSL_CERT'] %>
+  sslkey: <%= ENV['DATABASE_SSL_KEY'] %>
+  sslrootcert: <%= ENV['DATABASE_SSL_ROOT_CERT'] %>
+  
+  # Read replica optimizations
+  variables:
+    statement_timeout: 60000
+    default_transaction_isolation: 'read committed'
