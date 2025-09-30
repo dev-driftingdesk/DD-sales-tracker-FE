@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import authService from '../../../services/auth/authService.js';
+import { isApiEnabled } from '../../../services/api/config.js';
+import { ApiError } from '../../../services/api/errorHandler.js';
 
 const useAuthStore = create(
   persist(
@@ -11,7 +14,10 @@ const useAuthStore = create(
       error: null,
       rememberMe: false,
       
-      // Mock users database (in real app, this would be in backend)
+      // API integration flag
+      useApiIntegration: isApiEnabled(),
+      
+      // Mock users database (fallback when API is not enabled)
       users: [
         {
           id: '1',
@@ -47,34 +53,50 @@ const useAuthStore = create(
         set({ isLoading: true, error: null });
         
         try {
-          // Simulate API call delay
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          const user = get().users.find(
-            u => u.email === email && u.password === password
-          );
-          
-          if (!user) {
-            throw new Error('Invalid email or password');
+          if (get().useApiIntegration) {
+            // Use new API service
+            const response = await authService.login(email, password, rememberMe);
+            
+            set({
+              user: response.user,
+              isAuthenticated: true,
+              isLoading: false,
+              error: null,
+              rememberMe
+            });
+            
+            return { success: true, user: response.user };
+          } else {
+            // Fallback to existing mock implementation
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            const user = get().users.find(
+              u => u.email === email && u.password === password
+            );
+            
+            if (!user) {
+              throw new Error('Invalid email or password');
+            }
+            
+            const { password: _, ...userWithoutPassword } = user;
+            
+            set({
+              user: userWithoutPassword,
+              isAuthenticated: true,
+              isLoading: false,
+              error: null,
+              rememberMe
+            });
+            
+            return { success: true, user: userWithoutPassword };
           }
-          
-          const { password: _, ...userWithoutPassword } = user;
-          
-          set({
-            user: userWithoutPassword,
-            isAuthenticated: true,
-            isLoading: false,
-            error: null,
-            rememberMe
-          });
-          
-          return { success: true, user: userWithoutPassword };
         } catch (error) {
+          const errorMessage = error instanceof ApiError ? error.getUserMessage() : error.message;
           set({
             isLoading: false,
-            error: error.message
+            error: errorMessage
           });
-          return { success: false, error: error.message };
+          return { success: false, error: errorMessage };
         }
       },
 
@@ -82,106 +104,153 @@ const useAuthStore = create(
         set({ isLoading: true, error: null });
         
         try {
-          // Simulate API call delay
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          // Check if email already exists
-          const existingUser = get().users.find(u => u.email === userData.email);
-          if (existingUser) {
-            throw new Error('Email already registered');
+          if (get().useApiIntegration) {
+            // Use new API service
+            const response = await authService.register(userData);
+            
+            set({
+              user: response.user,
+              isAuthenticated: true,
+              isLoading: false,
+              error: null
+            });
+            
+            return { success: true, user: response.user };
+          } else {
+            // Fallback to existing mock implementation
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Check if email already exists
+            const existingUser = get().users.find(u => u.email === userData.email);
+            if (existingUser) {
+              throw new Error('Email already registered');
+            }
+            
+            // Create new user
+            const newUser = {
+              id: Date.now().toString(),
+              ...userData,
+              role: 'sales_rep', // Default role
+              avatar: null,
+              createdAt: new Date().toISOString()
+            };
+            
+            // Add to users (in real app, this would be saved to backend)
+            set(state => ({
+              users: [...state.users, newUser]
+            }));
+            
+            // Auto login after registration
+            const { password: _, ...userWithoutPassword } = newUser;
+            
+            set({
+              user: userWithoutPassword,
+              isAuthenticated: true,
+              isLoading: false,
+              error: null
+            });
+            
+            return { success: true, user: userWithoutPassword };
           }
-          
-          // Create new user
-          const newUser = {
-            id: Date.now().toString(),
-            ...userData,
-            role: 'sales_rep', // Default role
-            avatar: null,
-            createdAt: new Date().toISOString()
-          };
-          
-          // Add to users (in real app, this would be saved to backend)
-          set(state => ({
-            users: [...state.users, newUser]
-          }));
-          
-          // Auto login after registration
-          const { password: _, ...userWithoutPassword } = newUser;
-          
-          set({
-            user: userWithoutPassword,
-            isAuthenticated: true,
-            isLoading: false,
-            error: null
-          });
-          
-          return { success: true, user: userWithoutPassword };
         } catch (error) {
+          const errorMessage = error instanceof ApiError ? error.getUserMessage() : error.message;
           set({
             isLoading: false,
-            error: error.message
+            error: errorMessage
           });
-          return { success: false, error: error.message };
+          return { success: false, error: errorMessage };
         }
       },
 
-      logout: () => {
-        set({
-          user: null,
-          isAuthenticated: false,
-          error: null
-        });
+      logout: async () => {
+        try {
+          if (get().useApiIntegration) {
+            // Use new API service
+            await authService.logout();
+          }
+          
+          set({
+            user: null,
+            isAuthenticated: false,
+            error: null
+          });
+        } catch (error) {
+          // Always clear local state even if API logout fails
+          set({
+            user: null,
+            isAuthenticated: false,
+            error: null
+          });
+        }
       },
 
       resetPassword: async (email) => {
         set({ isLoading: true, error: null });
         
         try {
-          // Simulate API call delay
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          const user = get().users.find(u => u.email === email);
-          if (!user) {
-            throw new Error('No account found with this email');
+          if (get().useApiIntegration) {
+            // Use new API service
+            const response = await authService.resetPassword(email);
+            
+            set({ isLoading: false });
+            return response;
+          } else {
+            // Fallback to existing mock implementation
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            const user = get().users.find(u => u.email === email);
+            if (!user) {
+              throw new Error('No account found with this email');
+            }
+            
+            // In real app, this would send an email
+            console.log(`Password reset link sent to ${email}`);
+            
+            set({ isLoading: false });
+            return { success: true, message: 'Password reset link sent to your email' };
           }
-          
-          // In real app, this would send an email
-          console.log(`Password reset link sent to ${email}`);
-          
-          set({ isLoading: false });
-          return { success: true, message: 'Password reset link sent to your email' };
         } catch (error) {
+          const errorMessage = error instanceof ApiError ? error.getUserMessage() : error.message;
           set({
             isLoading: false,
-            error: error.message
+            error: errorMessage
           });
-          return { success: false, error: error.message };
+          return { success: false, error: errorMessage };
         }
       },
 
-      updatePassword: async (email, newPassword) => {
+      updatePassword: async (email, newPassword, resetToken = null) => {
         set({ isLoading: true, error: null });
         
         try {
-          // Simulate API call delay
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          set(state => ({
-            users: state.users.map(user =>
-              user.email === email
-                ? { ...user, password: newPassword }
-                : user
-            ),
-            isLoading: false
-          }));
-          
-          return { success: true, message: 'Password updated successfully' };
+          if (get().useApiIntegration) {
+            // Use new API service
+            const response = await authService.updatePassword(email, newPassword, resetToken);
+            
+            set({ isLoading: false });
+            return response;
+          } else {
+            // Fallback to existing mock implementation
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            set(state => ({
+              users: state.users.map(user =>
+                user.email === email
+                  ? { ...user, password: newPassword }
+                  : user
+              ),
+              isLoading: false
+            }));
+            
+            return { success: true, message: 'Password updated successfully' };
+          }
         } catch (error) {
+          const errorMessage = error instanceof ApiError ? error.getUserMessage() : error.message;
           set({
             isLoading: false,
-            error: error.message
+            error: errorMessage
           });
-          return { success: false, error: error.message };
+          return { success: false, error: errorMessage };
         }
       },
 
