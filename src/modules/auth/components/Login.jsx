@@ -202,27 +202,7 @@ const Login = ({ onToggleView, onLoginSuccess }) => {
             </div>
           </form>
 
-          {/* Demo Credentials */}
-          <div className="mt-8 pt-8 border-t border-gray-200">
-            <h3 className="text-sm font-medium text-gray-700 mb-4 text-center">Demo Accounts</h3>
-            <div className="space-y-2">
-              {demoCredentials.map((demo, index) => (
-                <button
-                  key={index}
-                  onClick={() => fillDemoCredentials(demo.email, demo.password)}
-                  className="w-full p-3 bg-gray-50 hover:bg-gray-100 rounded-xl text-left transition-colors group"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-gray-900 text-sm">{demo.label}</p>
-                      <p className="text-gray-600 text-xs">{demo.role}</p>
-                    </div>
-                    <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-gray-600" />
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
+       
         </div>
       </div>
 
