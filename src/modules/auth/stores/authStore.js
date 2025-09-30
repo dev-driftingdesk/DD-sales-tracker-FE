@@ -254,6 +254,47 @@ const useAuthStore = create(
         }
       },
 
+      confirmPasswordReset: async (email, token, newPassword) => {
+        set({ isLoading: true, error: null });
+        
+        try {
+          if (get().useApiIntegration) {
+            // Use new API service
+            const response = await authService.confirmPasswordReset(email, newPassword, token);
+            
+            set({ isLoading: false });
+            return response;
+          } else {
+            // Fallback to existing mock implementation
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            const userIndex = get().users.findIndex(u => u.email === email);
+            if (userIndex === -1) {
+              throw new Error('User not found');
+            }
+            
+            // Update password in mock data
+            set(state => ({
+              users: state.users.map(user =>
+                user.email === email
+                  ? { ...user, password: newPassword }
+                  : user
+              ),
+              isLoading: false
+            }));
+            
+            return { success: true, message: 'Password reset successfully' };
+          }
+        } catch (error) {
+          const errorMessage = error instanceof ApiError ? error.getUserMessage() : error.message;
+          set({
+            isLoading: false,
+            error: errorMessage
+          });
+          return { success: false, error: errorMessage };
+        }
+      },
+
       clearError: () => set({ error: null }),
 
       updateUser: (updates) => {
