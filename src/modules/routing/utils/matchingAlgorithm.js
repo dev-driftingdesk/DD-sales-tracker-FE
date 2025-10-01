@@ -1,5 +1,5 @@
 import { MATCHING_WEIGHTS, REGIONS } from '../constants/routingConstants';
-import useUserStore from '../../../stores/userStore';
+import useUserStore from '../../../stores/userStore.jsx';
 import usePerformanceStore from '../../performance/stores/performanceStore';
 
 /**

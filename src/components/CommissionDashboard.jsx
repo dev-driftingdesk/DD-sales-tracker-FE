@@ -5,7 +5,7 @@ import {
   Filter, ChevronDown, Users, Eye
 } from 'lucide-react';
 import useLeadStore from '../modules/leads/stores/leadStore';
-import useUserStore from '../stores/userStore';
+import useUserStore from '../stores/userStore.jsx';
 import {
   calculateCommissionProjections,
   formatCommission,

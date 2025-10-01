@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import useLeadStore from '../../leads/stores/leadStore';
-import useUserStore from '../../../stores/userStore';
+import useUserStore from '../../../stores/userStore.jsx';
 import useTeamStore from '../../../stores/teamStore';
 
 const usePerformanceStore = create((set, get) => ({

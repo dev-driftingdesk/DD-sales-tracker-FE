@@ -122,10 +122,15 @@ export const getApiEndpoints = () => {
       notes: `/api/v2/leads/{id}/notes`
     },
     contacts: {
-      list: '/contacts',
-      create: '/contacts',
-      update: '/contacts',
-      delete: '/contacts'
+      list: '/api/v2/contacts',
+      create: '/api/v2/contacts',
+      update: '/api/v2/contacts',
+      delete: '/api/v2/contacts',
+      search: '/api/v2/contacts/search',
+      updateStatus: '/api/v2/contacts/{id}/status',
+      addTag: '/api/v2/contacts/{id}/tags',
+      removeTag: '/api/v2/contacts/{id}/tags/{tag}',
+      analytics: '/api/v2/contacts/analytics'
     },
     companies: {
       list: '/companies',

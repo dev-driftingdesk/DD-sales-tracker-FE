@@ -3,7 +3,7 @@ import { Send, Save, FileText, User, Building, Wand2, Eye, X, Plus, Copy, Check 
 import useEmailStore from '../stores/emailStore';
 import useLeadStore from '../../leads/stores/leadStore';
 import useCRMStore from '../../crm-core/stores/crmStore';
-import useUserStore from '../../../stores/userStore';
+import useUserStore from '../../../stores/userStore.jsx';
 
 const EmailComposer = ({ selectedLead, selectedTemplate, onLeadSelect, onTemplateSelect }) => {
   const { 

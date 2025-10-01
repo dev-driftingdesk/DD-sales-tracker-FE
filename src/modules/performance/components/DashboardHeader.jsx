@@ -1,6 +1,6 @@
 import React from 'react';
 import { Calendar, ChevronDown, User, Trophy, TrendingUp } from 'lucide-react';
-import useUserStore from '../../../stores/userStore';
+import useUserStore from '../../../stores/userStore.jsx';
 import usePerformanceStore from '../stores/performanceStore';
 
 const DashboardHeader = () => {

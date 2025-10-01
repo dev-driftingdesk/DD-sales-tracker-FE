@@ -9,7 +9,7 @@ import {
   UserMinus, TrendingUp, Activity
 } from 'lucide-react';
 import useLeadStore from '../stores/leadStore';
-import useUserStore from '../../../stores/userStore';
+import useUserStore from '../../../stores/userStore.jsx';
 import useCRMStore from '../../crm-core/stores/crmStore';
 import { 
   LEAD_STATUS_LABELS, LEAD_STATUS_COLORS, LEAD_SOURCE_LABELS,

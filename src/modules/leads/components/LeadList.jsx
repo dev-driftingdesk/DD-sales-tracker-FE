@@ -2,7 +2,7 @@ import React from 'react';
 import { Search, Filter, ChevronRight, Phone, Mail, Calendar, MapPin, Package, DollarSign } from 'lucide-react';
 import useLeadStore from '../stores/leadStore';
 import useCRMStore from '../../crm-core/stores/crmStore';
-import useUserStore from '../../../stores/userStore';
+import useUserStore from '../../../stores/userStore.jsx';
 import { LEAD_STATUS_LABELS, LEAD_STATUS_COLORS, LEAD_SOURCE_LABELS } from '../constants/index';
 import { calculatePrimaryCommission, formatCommission } from '../../../utils/commissionUtils';
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { UserCheck, Award, TrendingUp, MapPin, MessageSquare, CheckCircle, X } from 'lucide-react';
 import useRoutingStore from '../stores/routingStore';
-import useUserStore from '../../../stores/userStore';
+import useUserStore from '../../../stores/userStore.jsx';
 import { LEAD_STATUS_LABELS, LEAD_SOURCE_LABELS } from '../../leads/constants/index';
 
 const LeadAssignment = ({ lead, onClose, onAssign }) => {

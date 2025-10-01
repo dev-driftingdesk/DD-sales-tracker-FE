@@ -1,5 +1,5 @@
 import useLeadStore from '../../leads/stores/leadStore';
-import useUserStore from '../../../stores/userStore';
+import useUserStore from '../../../stores/userStore.jsx';
 import { LEAD_STATUS_LABELS, LEAD_SOURCE_LABELS } from '../../leads/constants/index';
 
 // Generate AI summary for a lead

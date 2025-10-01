@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check, ChevronDown } from 'lucide-react';
 import useAnalyticsStore from '../stores/analyticsStore';
-import useUserStore from '../../../stores/userStore';
+import useUserStore from '../../../stores/userStore.jsx';
 import useTeamStore from '../../../stores/teamStore';
 import useLeadStore from '../../leads/stores/leadStore';
 

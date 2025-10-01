@@ -8,7 +8,7 @@ import EmailSettings from './components/EmailSettings';
 import useEmailStore from './stores/emailStore';
 import useLeadStore from '../leads/stores/leadStore';
 import useCRMStore from '../crm-core/stores/crmStore';
-import useUserStore from '../../stores/userStore';
+import useUserStore from '../../stores/userStore.jsx';
 
 const EmailModule = () => {
   const [activeTab, setActiveTab] = useState('composer');

@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import useLeadStore from '../modules/leads/stores/leadStore';
 import useCRMStore from '../modules/crm-core/stores/crmStore';
-import useUserStore from '../stores/userStore';
+import useUserStore from '../stores/userStore.jsx';
 import { 
   getConversionRateCategory, 
   getSalesVelocityCategory, 

@@ -1,5 +1,14 @@
 module.exports = {
-  testEnvironment: 'node',
+  testEnvironment: 'jsdom',
+  transform: {
+    '^.+\\.[jt]sx?$': 'babel-jest',
+  },
+  extensionsToTreatAsEsm: ['.jsx'],
+  globals: {
+    'ts-jest': {
+      useESM: true,
+    },
+  },
   roots: ['<rootDir>/tests'],
   testMatch: [
     '**/__tests__/**/*.js',
@@ -38,7 +47,11 @@ module.exports = {
     {
       displayName: 'Unit Tests',
       testMatch: ['<rootDir>/tests/unit/**/*.test.js'],
-      testEnvironment: 'node'
+      testEnvironment: 'jsdom',
+      transform: {
+        '^.+\\.[jt]sx?$': 'babel-jest',
+      },
+      setupFilesAfterEnv: ['<rootDir>/tests/setup/jest.setup.js']
     },
     {
       displayName: 'Integration Tests',

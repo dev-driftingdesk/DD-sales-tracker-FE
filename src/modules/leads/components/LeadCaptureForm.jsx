@@ -4,7 +4,7 @@ import useLeadStore from '../stores/leadStore';
 import { LEAD_SOURCES, LEAD_SOURCE_LABELS, LEAD_STATUSES } from '../constants/index';
 import useRoutingStore from '../../routing/stores/routingStore';
 import useCRMStore from '../../crm-core/stores/crmStore';
-import useUserStore from '../../../stores/userStore';
+import useUserStore from '../../../stores/userStore.jsx';
 
 const LeadCaptureForm = ({ onClose }) => {
   const { addLead } = useLeadStore();

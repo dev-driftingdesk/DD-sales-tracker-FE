@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { DATE_RANGES } from '../constants';
 import useLeadStore from '../../leads/stores/leadStore';
-import useUserStore from '../../../stores/userStore';
+import useUserStore from '../../../stores/userStore.jsx';
 import useTeamStore from '../../../stores/teamStore';
 
 const useAnalyticsStore = create((set, get) => ({

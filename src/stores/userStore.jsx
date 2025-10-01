@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 
 // Mock user data
 const mockUsers = [
@@ -232,58 +233,83 @@ const mockUsers = [
   }
 ];
 
-const useUserStore = create((set, get) => ({
-  users: mockUsers,
-  currentUser: mockUsers[3], // Default to Jacob (user-4) for the demo
-  isAuthenticated: true,
-  
-  // Actions
-  setCurrentUser: (user) => set({ currentUser: user, isAuthenticated: true }),
-  
-  login: (email, password) => {
-    // Mock login - in real app, this would call an API
-    const user = mockUsers.find(u => u.email === email);
-    if (user) {
-      set({ currentUser: user, isAuthenticated: true });
-      return { success: true, user };
+const useUserStore = create(
+  persist(
+    (set, get) => ({
+      users: mockUsers,
+      currentUser: null, // Will be loaded from localStorage or set to default
+      isAuthenticated: false, // Will be determined by presence of currentUser
+      
+      // Actions
+      setCurrentUser: (user) => set({ currentUser: user, isAuthenticated: true }),
+      
+      login: (email, password) => {
+        // Mock login - in real app, this would call an API
+        const user = mockUsers.find(u => u.email === email);
+        if (user) {
+          set({ currentUser: user, isAuthenticated: true });
+          return { success: true, user };
+        }
+        return { success: false, error: 'Invalid credentials' };
+      },
+      
+      logout: () => set({ currentUser: null, isAuthenticated: false }),
+      
+      getUserById: (userId) => {
+        const { users } = get();
+        return users.find(u => u.id === userId);
+      },
+      
+      getUsersByTeam: (teamId) => {
+        const { users } = get();
+        return users.filter(u => u.team === teamId);
+      },
+      
+      getUsersByRole: (role) => {
+        const { users } = get();
+        return users.filter(u => u.role === role);
+      },
+      
+      isAdmin: () => {
+        const { currentUser } = get();
+        return currentUser?.role === 'admin';
+      },
+      
+      isManager: () => {
+        const { currentUser } = get();
+        return currentUser?.role === 'manager' || currentUser?.role === 'admin';
+      },
+      
+      // For demo purposes - switch between users
+      switchUser: (userId) => {
+        const user = mockUsers.find(u => u.id === userId);
+        if (user) {
+          set({ currentUser: user, isAuthenticated: true });
+        }
+      },
+
+      // Initialize user session on app start
+      initializeSession: () => {
+        const { currentUser } = get();
+        // If we have a persisted user but no auth state, restore it
+        if (currentUser && !get().isAuthenticated) {
+          set({ isAuthenticated: true });
+        } else if (!currentUser) {
+          // Set default user for demo if no persisted user
+          set({ currentUser: mockUsers[3], isAuthenticated: true });
+        }
+      }
+    }),
+    {
+      name: 'user-storage', // name of the localStorage key
+      storage: createJSONStorage(() => localStorage),
+      // Only persist user authentication data
+      partialize: (state) => ({
+        currentUser: state.currentUser,
+        isAuthenticated: state.isAuthenticated,
+      }),
     }
-    return { success: false, error: 'Invalid credentials' };
-  },
-  
-  logout: () => set({ currentUser: null, isAuthenticated: false }),
-  
-  getUserById: (userId) => {
-    const { users } = get();
-    return users.find(u => u.id === userId);
-  },
-  
-  getUsersByTeam: (teamId) => {
-    const { users } = get();
-    return users.filter(u => u.team === teamId);
-  },
-  
-  getUsersByRole: (role) => {
-    const { users } = get();
-    return users.filter(u => u.role === role);
-  },
-  
-  isAdmin: () => {
-    const { currentUser } = get();
-    return currentUser?.role === 'admin';
-  },
-  
-  isManager: () => {
-    const { currentUser } = get();
-    return currentUser?.role === 'manager' || currentUser?.role === 'admin';
-  },
-  
-  // For demo purposes - switch between users
-  switchUser: (userId) => {
-    const user = mockUsers.find(u => u.id === userId);
-    if (user) {
-      set({ currentUser: user });
-    }
-  }
-}));
+  )
+);
 
 export default useUserStore;

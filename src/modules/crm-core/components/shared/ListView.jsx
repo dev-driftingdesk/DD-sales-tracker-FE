@@ -22,7 +22,9 @@ export default function ListView({
     }
   };
 
-  const sortedItems = [...items].sort((a, b) => {
+  const filteredItems = items.filter(item => item !== null && item !== undefined);
+  
+  const sortedItems = [...filteredItems].sort((a, b) => {
     if (!sortColumn) return 0;
     
     const aValue = a[sortColumn];
@@ -35,10 +37,10 @@ export default function ListView({
   });
 
   const handleSelectAll = () => {
-    if (selectedItems.length === items.length) {
+    if (selectedItems.length === filteredItems.length) {
       onSelectionChange([]);
     } else {
-      onSelectionChange(items.map(item => item.id));
+      onSelectionChange(filteredItems.map(item => item.id));
     }
   };
 
@@ -99,7 +101,7 @@ export default function ListView({
                   onClick={handleSelectAll}
                   className="flex items-center"
                 >
-                  {selectedItems.length === items.length && items.length > 0 ? (
+                  {selectedItems.length === filteredItems.length && filteredItems.length > 0 ? (
                     <Check className="w-5 h-5 text-teal-600" />
                   ) : (
                     <Square className="w-5 h-5 text-gray-400" />

@@ -15,17 +15,24 @@ export default function KanbanView({
   const [draggedItemId, setDraggedItemId] = useState(null);
   const [dragOverColumn, setDragOverColumn] = useState(null);
 
-  // Group items by column
+  // Group items by column with null safety
   const itemsByColumn = useMemo(() => {
     const grouped = {};
     columns.forEach(column => {
       grouped[column.id] = [];
     });
     
-    items.forEach(item => {
-      const columnId = getItemColumn(item);
-      if (grouped[columnId]) {
-        grouped[columnId].push(item);
+    // Filter out null/undefined items and add defensive programming
+    const validItems = (items || []).filter(item => item && item.id);
+    
+    validItems.forEach(item => {
+      try {
+        const columnId = getItemColumn(item);
+        if (columnId && grouped[columnId]) {
+          grouped[columnId].push(item);
+        }
+      } catch (error) {
+        console.warn('Error processing item in KanbanView:', item, error);
       }
     });
     
@@ -100,12 +107,16 @@ export default function KanbanView({
     
     const itemId = e.dataTransfer.getData('text/plain');
     
-    if (itemId && onItemMove) {
-      const draggedItem = items.find(item => String(item.id) === String(itemId));
+    if (itemId && onItemMove && items) {
+      const draggedItem = items.find(item => item && String(item.id) === String(itemId));
       if (draggedItem) {
-        const currentColumn = getItemColumn(draggedItem);
-        if (currentColumn !== columnId) {
-          onItemMove(itemId, columnId);
+        try {
+          const currentColumn = getItemColumn(draggedItem);
+          if (currentColumn && currentColumn !== columnId) {
+            onItemMove(itemId, columnId);
+          }
+        } catch (error) {
+          console.warn('Error processing drag drop:', error);
         }
       }
     }

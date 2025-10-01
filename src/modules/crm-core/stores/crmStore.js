@@ -4,6 +4,8 @@ import { calculateSalesVelocity, calculateAverageSalesCycle } from '../../../uti
 import { calculatePipelineValue, calculateWinRate } from '../../../utils/pipelineMetricsUtils';
 import { calculateDealClosureTime } from '../../../utils/dealActivityMetricsUtils';
 import { calculateMonthlyRevenuePerRep } from '../../../utils/revenueEngagementMetricsUtils';
+import contactService from '../../../services/contacts/contactService.js';
+import { ApiError } from '../../../services/api/errorHandler.js';
 
 const useCRMStore = create(
   persist(
@@ -17,6 +19,11 @@ const useCRMStore = create(
         companies: [],
         status: 'all'
       },
+      // Contact loading states
+      contactsLoading: false,
+      contactsError: null,
+      contactOperationLoading: false,
+      contactOperationError: null,
 
       // Companies state
       companies: [],
@@ -273,35 +280,220 @@ const useCRMStore = create(
         status: 'all'
       },
 
-      // Contact actions
-      addContact: (contact) => set((state) => ({
-        contacts: [...state.contacts, {
-          id: Date.now().toString(),
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          ...contact
-        }]
-      })),
+      // Contact actions with API integration
+      loadContacts: async (filters = {}) => {
+        set({ contactsLoading: true, contactsError: null });
+        try {
+          const response = await contactService.getContacts(filters);
+          set({ 
+            contacts: response.data,
+            contactsLoading: false,
+            contactsError: null
+          });
+          return response;
+        } catch (error) {
+          set({ 
+            contactsLoading: false,
+            contactsError: error instanceof ApiError ? error.message : 'Failed to load contacts'
+          });
+          throw error;
+        }
+      },
 
-      updateContact: (id, updates) => set((state) => ({
-        contacts: state.contacts.map(contact =>
-          String(contact.id) === String(id) ? { ...contact, ...updates, updatedAt: new Date().toISOString() } : contact
-        ),
-        selectedContact: state.selectedContact?.id === id 
-          ? { ...state.selectedContact, ...updates } 
-          : state.selectedContact
-      })),
+      searchContacts: async (query, filters = {}) => {
+        set({ contactsLoading: true, contactsError: null });
+        try {
+          const response = await contactService.searchContacts(query, filters);
+          set({ 
+            contacts: response.data,
+            contactsLoading: false,
+            contactsError: null
+          });
+          return response;
+        } catch (error) {
+          set({ 
+            contactsLoading: false,
+            contactsError: error instanceof ApiError ? error.message : 'Failed to search contacts'
+          });
+          throw error;
+        }
+      },
 
-      deleteContact: (id) => set((state) => ({
-        contacts: state.contacts.filter(contact => contact.id !== id),
-        selectedContact: state.selectedContact?.id === id ? null : state.selectedContact
-      })),
+      addContact: async (contactData) => {
+        set({ contactOperationLoading: true, contactOperationError: null });
+        try {
+          const response = await contactService.createContact(contactData);
+          set((state) => ({
+            contacts: [...state.contacts, response.data],
+            contactOperationLoading: false,
+            contactOperationError: null
+          }));
+          return response;
+        } catch (error) {
+          set({ 
+            contactOperationLoading: false,
+            contactOperationError: error instanceof ApiError ? error.message : 'Failed to create contact'
+          });
+          throw error;
+        }
+      },
+
+      updateContact: async (id, updates) => {
+        set({ contactOperationLoading: true, contactOperationError: null });
+        try {
+          const response = await contactService.updateContact(id, updates);
+          set((state) => ({
+            contacts: state.contacts.map(contact =>
+              String(contact.id) === String(id) ? response.data : contact
+            ),
+            selectedContact: state.selectedContact?.id === id 
+              ? response.data 
+              : state.selectedContact,
+            contactOperationLoading: false,
+            contactOperationError: null
+          }));
+          return response;
+        } catch (error) {
+          set({ 
+            contactOperationLoading: false,
+            contactOperationError: error instanceof ApiError ? error.message : 'Failed to update contact'
+          });
+          throw error;
+        }
+      },
+
+      deleteContact: async (id) => {
+        set({ contactOperationLoading: true, contactOperationError: null });
+        try {
+          await contactService.deleteContact(id);
+          set((state) => ({
+            contacts: state.contacts.filter(contact => contact.id !== id),
+            selectedContact: state.selectedContact?.id === id ? null : state.selectedContact,
+            contactOperationLoading: false,
+            contactOperationError: null
+          }));
+          return { success: true, message: 'Contact deleted successfully' };
+        } catch (error) {
+          set({ 
+            contactOperationLoading: false,
+            contactOperationError: error instanceof ApiError ? error.message : 'Failed to delete contact'
+          });
+          throw error;
+        }
+      },
+
+      updateContactStatus: async (id, status) => {
+        set({ contactOperationLoading: true, contactOperationError: null });
+        try {
+          const response = await contactService.updateContactStatus(id, status);
+          set((state) => ({
+            contacts: state.contacts.map(contact =>
+              String(contact.id) === String(id) ? response.data : contact
+            ),
+            selectedContact: state.selectedContact?.id === id 
+              ? response.data 
+              : state.selectedContact,
+            contactOperationLoading: false,
+            contactOperationError: null
+          }));
+          return response;
+        } catch (error) {
+          set({ 
+            contactOperationLoading: false,
+            contactOperationError: error instanceof ApiError ? error.message : 'Failed to update contact status'
+          });
+          throw error;
+        }
+      },
+
+      addContactTag: async (id, tag) => {
+        set({ contactOperationLoading: true, contactOperationError: null });
+        try {
+          const response = await contactService.addContactTag(id, tag);
+          set((state) => ({
+            contacts: state.contacts.map(contact =>
+              String(contact.id) === String(id) ? response.data : contact
+            ),
+            selectedContact: state.selectedContact?.id === id 
+              ? response.data 
+              : state.selectedContact,
+            contactOperationLoading: false,
+            contactOperationError: null
+          }));
+          return response;
+        } catch (error) {
+          set({ 
+            contactOperationLoading: false,
+            contactOperationError: error instanceof ApiError ? error.message : 'Failed to add tag to contact'
+          });
+          throw error;
+        }
+      },
+
+      removeContactTag: async (id, tag) => {
+        set({ contactOperationLoading: true, contactOperationError: null });
+        try {
+          const response = await contactService.removeContactTag(id, tag);
+          set((state) => ({
+            contacts: state.contacts.map(contact =>
+              String(contact.id) === String(id) ? response.data : contact
+            ),
+            selectedContact: state.selectedContact?.id === id 
+              ? response.data 
+              : state.selectedContact,
+            contactOperationLoading: false,
+            contactOperationError: null
+          }));
+          return response;
+        } catch (error) {
+          set({ 
+            contactOperationLoading: false,
+            contactOperationError: error instanceof ApiError ? error.message : 'Failed to remove tag from contact'
+          });
+          throw error;
+        }
+      },
+
+      getContactAnalytics: async () => {
+        try {
+          const response = await contactService.getContactAnalytics();
+          return response.data;
+        } catch (error) {
+          console.error('Failed to fetch contact analytics:', error);
+          throw error;
+        }
+      },
 
       setSelectedContact: (contact) => set({ selectedContact: contact }),
 
       setContactFilters: (filters) => set((state) => ({
         contactFilters: { ...state.contactFilters, ...filters }
       })),
+
+      // Clear contact errors
+      clearContactErrors: () => set({ 
+        contactsError: null, 
+        contactOperationError: null 
+      }),
+
+      // Clean up null/invalid contacts from state
+      cleanupContactData: () => set((state) => {
+        const validContacts = (state.contacts || []).filter(contact => 
+          contact && 
+          contact.id && 
+          contact.name &&
+          typeof contact === 'object'
+        );
+        
+        const cleanedCount = state.contacts.length - validContacts.length;
+        if (cleanedCount > 0) {
+          console.warn(`Cleaned up ${cleanedCount} invalid contact entries`);
+        }
+        
+        return {
+          contacts: validContacts
+        };
+      }),
 
       // Company actions
       addCompany: (company) => set((state) => ({
@@ -472,7 +664,15 @@ const useCRMStore = create(
       // Computed getters
       getFilteredContacts: () => {
         const state = get();
-        return state.contacts.filter(contact => {
+        // Filter out null/undefined contacts and ensure data integrity
+        const validContacts = (state.contacts || []).filter(contact => 
+          contact && 
+          contact.id && 
+          contact.name &&
+          typeof contact === 'object'
+        );
+        
+        return validContacts.filter(contact => {
           if (state.contactFilters.search && 
               !contact.name.toLowerCase().includes(state.contactFilters.search.toLowerCase()) &&
               !contact.email?.toLowerCase().includes(state.contactFilters.search.toLowerCase())) {

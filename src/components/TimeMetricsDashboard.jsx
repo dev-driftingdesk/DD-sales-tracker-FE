@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Clock, Target, TrendingUp, TrendingDown, Users, MessageCircle, Phone, Mail, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
 import useLeadStore from '../modules/leads/stores/leadStore';
-import useUserStore from '../stores/userStore';
+import useUserStore from '../stores/userStore.jsx';
 import { formatDuration, getPerformanceColor, calculateResponseTimeBenchmarks } from '../utils/timeMetricsUtils';
 
 const TimeMetricsDashboard = ({ teamMemberIds = [], showIndividualBreakdown = false }) => {

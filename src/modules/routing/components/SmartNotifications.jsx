@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Bell, AlertCircle, UserPlus, Clock, TrendingUp, X } from 'lucide-react';
 import useRoutingStore from '../stores/routingStore';
-import useUserStore from '../../../stores/userStore';
+import useUserStore from '../../../stores/userStore.jsx';
 import { NOTIFICATION_TYPES } from '../constants/routingConstants';
 
 const SmartNotifications = () => {

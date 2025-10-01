@@ -10,7 +10,7 @@ import PipelineMetricsDashboard from '../../components/PipelineMetricsDashboard'
 import AdvancedLeadMetricsDashboard from '../../components/AdvancedLeadMetricsDashboard';
 import DealActivityMetricsDashboard from '../../components/DealActivityMetricsDashboard';
 import RevenueEngagementMetricsDashboard from '../../components/RevenueEngagementMetricsDashboard';
-import useUserStore from '../../stores/userStore';
+import useUserStore from '../../stores/userStore.jsx';
 import usePerformanceStore from './stores/performanceStore';
 import useTeamStore from '../../stores/teamStore';
 import useLeadStore from '../leads/stores/leadStore';

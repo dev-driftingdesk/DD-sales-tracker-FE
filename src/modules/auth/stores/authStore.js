@@ -306,8 +306,8 @@ const useAuthStore = create(
     {
       name: 'auth-storage',
       partialize: (state) => ({
-        user: state.rememberMe ? state.user : null,
-        isAuthenticated: state.rememberMe ? state.isAuthenticated : false,
+        user: state.user,
+        isAuthenticated: state.isAuthenticated,
         rememberMe: state.rememberMe
       })
     }

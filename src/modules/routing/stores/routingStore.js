@@ -4,7 +4,7 @@ import { findBestMatches } from '../utils/matchingAlgorithm';
 import { generateStrategyRecommendations, generateFollowUpReminders } from '../utils/strategyEngine';
 import { ASSIGNMENT_STATUS, NOTIFICATION_TYPES } from '../constants/routingConstants';
 import useLeadStore from '../../leads/stores/leadStore';
-import useUserStore from '../../../stores/userStore';
+import useUserStore from '../../../stores/userStore.jsx';
 
 // Initialize routing data with realistic scenarios
 const initializeRoutingData = () => {

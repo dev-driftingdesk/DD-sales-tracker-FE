@@ -1,5 +1,5 @@
 import useLeadStore from '../../leads/stores/leadStore';
-import useUserStore from '../../../stores/userStore';
+import useUserStore from '../../../stores/userStore.jsx';
 
 /**
  * Generate strategy recommendations based on similar successful deals

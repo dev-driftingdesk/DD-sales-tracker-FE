@@ -13,66 +13,86 @@ const STATUS_COLUMNS = [
 export default function ContactKanban({ contacts, onContactClick }) {
   const { updateContact } = useCRMStore();
 
+  // Filter out null/undefined contacts before processing
+  const validContacts = (contacts || []).filter(contact => contact && contact.id);
+
   const handleContactMove = (contactId, newStatus) => {
     updateContact(contactId, { status: newStatus });
   };
 
-  const renderContactCard = (contact) => (
-    <>
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-teal-100 rounded-full flex items-center justify-center">
-            <span className="text-teal-600 text-xs font-medium">
-              {contact.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-            </span>
-          </div>
-          <div>
-            <h4 className="font-medium text-gray-900 text-sm">{contact.name}</h4>
-            <p className="text-xs text-gray-600">{contact.title}</p>
+  const renderContactCard = (contact) => {
+    // Additional safety check for contact rendering
+    if (!contact || !contact.name) {
+      console.warn('Invalid contact data for rendering:', contact);
+      return (
+        <div className="text-red-500 text-xs p-2">
+          Invalid contact data
+        </div>
+      );
+    }
+
+    return (
+      <div>
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-teal-100 rounded-full flex items-center justify-center">
+              <span className="text-teal-600 text-xs font-medium">
+                {contact.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+              </span>
+            </div>
+            <div>
+              <h4 className="font-medium text-gray-900 text-sm">{contact.name}</h4>
+              <p className="text-xs text-gray-600">{contact.title || 'No title'}</p>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="space-y-1 text-xs text-gray-500">
-        {contact.company && (
-          <div className="flex items-center gap-1">
-            <Building className="w-3 h-3" />
-            <span className="truncate">{contact.company}</span>
-          </div>
-        )}
-        {contact.email && (
-          <div className="flex items-center gap-1">
-            <Mail className="w-3 h-3" />
-            <span className="truncate">{contact.email}</span>
-          </div>
-        )}
-        {contact.phone && (
-          <div className="flex items-center gap-1">
-            <Phone className="w-3 h-3" />
-            <span>{contact.phone}</span>
-          </div>
-        )}
-      </div>
-
-      {contact.tags && contact.tags.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-1">
-          {contact.tags.slice(0, 2).map((tag, index) => (
-            <span
-              key={index}
-              className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded"
-            >
-              {tag}
-            </span>
-          ))}
-          {contact.tags.length > 2 && (
-            <span className="text-xs text-gray-400">+{contact.tags.length - 2}</span>
+        <div className="space-y-1 text-xs text-gray-500">
+          {contact.company && (
+            <div className="flex items-center gap-1">
+              <Building className="w-3 h-3" />
+              <span className="truncate">{contact.company}</span>
+            </div>
+          )}
+          {contact.email && (
+            <div className="flex items-center gap-1">
+              <Mail className="w-3 h-3" />
+              <span className="truncate">{contact.email}</span>
+            </div>
+          )}
+          {contact.phone && (
+            <div className="flex items-center gap-1">
+              <Phone className="w-3 h-3" />
+              <span>{contact.phone}</span>
+            </div>
           )}
         </div>
-      )}
-    </>
-  );
+
+        {contact.tags && contact.tags.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {contact.tags.slice(0, 2).map((tag, index) => (
+              <span
+                key={index}
+                className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded"
+              >
+                {tag}
+              </span>
+            ))}
+            {contact.tags.length > 2 && (
+              <span className="text-xs text-gray-400">+{contact.tags.length - 2}</span>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const getContactStatus = (contact) => {
+    // Add null safety to prevent crashes
+    if (!contact || typeof contact !== 'object') {
+      console.warn('Invalid contact passed to getContactStatus:', contact);
+      return 'active';
+    }
     return contact.status || 'active';
   };
 
@@ -85,7 +105,7 @@ export default function ContactKanban({ contacts, onContactClick }) {
 
   return (
     <KanbanView
-      items={contacts}
+      items={validContacts}
       columns={STATUS_COLUMNS}
       onItemMove={handleContactMove}
       onItemClick={onContactClick}

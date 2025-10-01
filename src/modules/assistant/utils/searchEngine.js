@@ -1,5 +1,5 @@
 import useLeadStore from '../../leads/stores/leadStore';
-import useUserStore from '../../../stores/userStore';
+import useUserStore from '../../../stores/userStore.jsx';
 
 // Search types
 export const SEARCH_TYPES = {

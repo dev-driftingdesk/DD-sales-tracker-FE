@@ -4,7 +4,7 @@ import {
   TrendingUp, Clock, DollarSign, Target, ChevronRight, RefreshCw
 } from 'lucide-react';
 import useRoutingStore from '../stores/routingStore';
-import useUserStore from '../../../stores/userStore';
+import useUserStore from '../../../stores/userStore.jsx';
 import useLeadStore from '../../leads/stores/leadStore';
 import LeadAssignment from './LeadAssignment';
 import { LEAD_SOURCE_LABELS } from '../../leads/constants/index';

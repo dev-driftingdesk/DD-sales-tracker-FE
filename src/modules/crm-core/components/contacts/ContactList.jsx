@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Search, Filter, Plus } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Search, Filter, Plus, AlertCircle } from 'lucide-react';
 import useCRMStore from '../../stores/crmStore';
 import ContactForm from './ContactForm';
 import ViewSelector, { VIEW_TYPES } from '../shared/ViewSelector';
@@ -15,13 +15,42 @@ export default function ContactList() {
     setContactFilters,
     selectedContact,
     viewPreferences,
-    setViewPreference
+    setViewPreference,
+    contactsLoading,
+    contactsError,
+    searchContacts
   } = useCRMStore();
   
   const [showContactForm, setShowContactForm] = useState(false);
   const [selectedItems, setSelectedItems] = useState([]);
   const contacts = getFilteredContacts();
   const currentView = viewPreferences.contacts || VIEW_TYPES.LIST;
+
+  // Debounced search handler
+  const handleSearch = useCallback(
+    async (searchTerm) => {
+      if (searchTerm.trim()) {
+        try {
+          await searchContacts(searchTerm, contactFilters);
+        } catch (error) {
+          console.error('Search failed:', error);
+        }
+      }
+    },
+    [searchContacts, contactFilters]
+  );
+
+  // Debounce search input
+  useEffect(() => {
+    const searchTerm = contactFilters.search;
+    if (searchTerm) {
+      const timeoutId = setTimeout(() => {
+        handleSearch(searchTerm);
+      }, 500); // 500ms debounce
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [contactFilters.search, handleSearch]);
 
   return (
     <div className="bg-white rounded-lg shadow-sm">
@@ -61,8 +90,26 @@ export default function ContactList() {
         </div>
       </div>
 
+      {/* Error display */}
+      {contactsError && (
+        <div className="mx-4 mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+          <AlertCircle className="w-5 h-5 text-red-600" />
+          <p className="text-red-600 text-sm">{contactsError}</p>
+        </div>
+      )}
+
+      {/* Loading state */}
+      {contactsLoading && (
+        <div className="p-8 text-center">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600"></div>
+          <p className="mt-2 text-gray-600">Loading contacts...</p>
+        </div>
+      )}
+
       {/* Render view based on selection */}
-      {currentView === VIEW_TYPES.LIST && (
+      {!contactsLoading && (
+        <>
+        {currentView === VIEW_TYPES.LIST && (
         <ContactListView
           contacts={contacts}
           onContactClick={setSelectedContact}
@@ -86,10 +133,12 @@ export default function ContactList() {
         />
       )}
 
-      {contacts.length === 0 && currentView === VIEW_TYPES.LIST && (
-        <div className="p-8 text-center">
-          <p className="text-gray-500">No contacts found</p>
-        </div>
+        {contacts.length === 0 && currentView === VIEW_TYPES.LIST && (
+          <div className="p-8 text-center">
+            <p className="text-gray-500">No contacts found</p>
+          </div>
+        )}
+        </>
       )}
       
       {showContactForm && (

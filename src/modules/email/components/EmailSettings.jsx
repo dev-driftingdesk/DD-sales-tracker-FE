@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Settings, Mail, Server, Shield, Bell, Save, Check, AlertTriangle, Monitor, PlayCircle, StopCircle, Zap } from 'lucide-react';
 import useEmailStore from '../stores/emailStore';
-import useUserStore from '../../../stores/userStore';
+import useUserStore from '../../../stores/userStore.jsx';
 import useLeadStore from '../../leads/stores/leadStore';
 import { externalEmailMonitor } from '../../../services/externalEmailMonitor';
 

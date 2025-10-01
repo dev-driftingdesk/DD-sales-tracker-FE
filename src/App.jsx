@@ -16,6 +16,7 @@ import NotificationTest from './modules/notifications/test/NotificationTest';
 import NotificationHelper from './modules/notifications/utils/notificationHelper';
 import AuthContainer from './modules/auth/AuthContainer';
 import useAuthStore from './modules/auth/stores/authStore';
+import useUserStore from './stores/userStore.jsx';
 import useCRMStore from './modules/crm-core/stores/crmStore';
 import useEmailStore from './modules/email/stores/emailStore';
 import { externalEmailMonitor } from './services/externalEmailMonitor';
@@ -27,10 +28,12 @@ function App() {
   const [showAssistant, setShowAssistant] = useState(false);
   const { unreadCount, initializeNotifications } = useNotificationStore();
   const { isAuthenticated, user, logout } = useAuthStore();
+  const { initializeSession } = useUserStore();
   const { products, addProduct, getStatistics } = useCRMStore();
 
-  // Initialize notifications on mount
+  // Initialize user session and notifications on mount
   useEffect(() => {
+    initializeSession(); // Initialize user session from localStorage
     initializeNotifications();
   }, []);
 

@@ -1,6 +1,9 @@
 // Global Jest Setup
 require('dotenv').config({ path: '.env.test' });
 
+// React Testing Library setup
+import '@testing-library/jest-dom';
+
 // Global test utilities
 global.console = {
   ...console,

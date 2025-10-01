@@ -29,13 +29,25 @@ export default function CRMCoreModule() {
     getFilteredActivities,
     dealStages,
     deleteContact,
-    deleteCompany
+    deleteCompany,
+    loadContacts,
+    contactsLoading,
+    contactsError
   } = useCRMStore();
 
   const stats = getStatistics();
 
-  // Initialize with demo data
+  // Initialize contacts data
   useEffect(() => {
+    const initializeData = async () => {
+      try {
+        // Load contacts from API or use mock data
+        await loadContacts();
+      } catch (error) {
+        console.error('Failed to load initial contact data:', error);
+      }
+    };
+
     const initializeDemoData = () => {
       // Add demo contacts
       const demoContacts = [
@@ -1036,8 +1048,12 @@ export default function CRMCoreModule() {
       }
     };
 
+    // Initialize data on mount
+    initializeData();
+    
+    // Also initialize demo data for other entities (companies, deals, etc.)
     initializeDemoData();
-  }, []);
+  }, [loadContacts]);
 
   useEffect(() => {
     if (selectedContact) {

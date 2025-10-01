@@ -3,7 +3,7 @@ import { X, Plus, Trash2 } from 'lucide-react';
 import useCRMStore from '../../stores/crmStore';
 
 export default function ContactForm({ onClose }) {
-  const { addContact, companies } = useCRMStore();
+  const { addContact, companies, contactOperationLoading, contactOperationError } = useCRMStore();
   const [formData, setFormData] = useState({
     name: '',
     title: '',
@@ -18,15 +18,20 @@ export default function ContactForm({ onClose }) {
   });
   const [newTag, setNewTag] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name || !formData.email) {
       alert('Name and email are required');
       return;
     }
     
-    addContact(formData);
-    onClose();
+    try {
+      await addContact(formData);
+      onClose();
+    } catch (error) {
+      // Error is already handled in the store and shown via contactOperationError
+      console.error('Failed to create contact:', error);
+    }
   };
 
   const handleAddTag = () => {
@@ -80,6 +85,12 @@ export default function ContactForm({ onClose }) {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
+          {contactOperationError && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-red-600 text-sm">{contactOperationError}</p>
+            </div>
+          )}
+          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -246,9 +257,10 @@ export default function ContactForm({ onClose }) {
             </button>
             <button
               type="submit"
-              className="px-6 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700"
+              disabled={contactOperationLoading}
+              className="px-6 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Add Contact
+              {contactOperationLoading ? 'Adding...' : 'Add Contact'}
             </button>
           </div>
         </form>
