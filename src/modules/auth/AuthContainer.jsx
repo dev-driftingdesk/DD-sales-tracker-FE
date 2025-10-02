@@ -9,13 +9,14 @@ import { getResetPasswordParams, clearUrlParams } from './utils/urlUtils';
 const AuthContainer = ({ onAuthSuccess }) => {
   const [currentView, setCurrentView] = useState('login'); // 'login', 'register', 'forgot', 'reset-password'
   const [resetPasswordData, setResetPasswordData] = useState(null);
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user, isInitializing } = useAuthStore();
 
   useEffect(() => {
-    if (isAuthenticated && user) {
+    // Only trigger auth success after initialization is complete
+    if (isAuthenticated && user && !isInitializing) {
       onAuthSuccess?.(user);
     }
-  }, [isAuthenticated, user, onAuthSuccess]);
+  }, [isAuthenticated, user, isInitializing, onAuthSuccess]);
 
   // Check for reset password URL parameters on mount
   useEffect(() => {
@@ -39,6 +40,18 @@ const AuthContainer = ({ onAuthSuccess }) => {
   const handleRegisterSuccess = (user) => {
     onAuthSuccess?.(user);
   };
+
+  // Don't render auth forms while still initializing
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Checking authentication...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">

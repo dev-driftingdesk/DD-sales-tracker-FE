@@ -245,6 +245,7 @@ const useUserStore = create(
       
       login: (email, password) => {
         // Mock login - in real app, this would call an API
+        // NOTE: This is now primarily used by authStore for consistency
         const user = mockUsers.find(u => u.email === email);
         if (user) {
           set({ currentUser: user, isAuthenticated: true });
@@ -288,15 +289,23 @@ const useUserStore = create(
         }
       },
 
-      // Initialize user session on app start
+      // Initialize user session on app start (for mock mode compatibility)
       initializeSession: () => {
-        const { currentUser } = get();
-        // If we have a persisted user but no auth state, restore it
-        if (currentUser && !get().isAuthenticated) {
-          set({ isAuthenticated: true });
-        } else if (!currentUser) {
+        const { currentUser, isAuthenticated } = get();
+        
+        // Only initialize if we don't have a current user
+        // This allows authStore to take precedence
+        if (!currentUser && !isAuthenticated) {
           // Set default user for demo if no persisted user
+          console.log('UserStore: Initializing default demo user');
           set({ currentUser: mockUsers[3], isAuthenticated: true });
+        } else if (currentUser && isAuthenticated) {
+          // Validate the persisted user still exists
+          const validUser = mockUsers.find(u => u.id === currentUser.id);
+          if (!validUser) {
+            console.log('UserStore: Persisted user no longer valid, clearing session');
+            set({ currentUser: null, isAuthenticated: false });
+          }
         }
       }
     }),

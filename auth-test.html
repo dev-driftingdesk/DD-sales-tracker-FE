@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authentication Persistence Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .warning { background-color: #fff3cd; border-color: #ffeaa7; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>SalesTracker Authentication Persistence Test</h1>
+    
+    <div class="test-section">
+        <h3>Test Instructions:</h3>
+        <ol>
+            <li>Open SalesTracker in a new tab: <a href="http://localhost:5173" target="_blank">http://localhost:5173</a></li>
+            <li>Login with credentials (e.g., admin@salestracker.com / admin123)</li>
+            <li>Verify you can see the dashboard</li>
+            <li>Refresh the page (F5 or Ctrl+R)</li>
+            <li>Check if you remain logged in (should NOT redirect to login)</li>
+            <li>Open a new tab and navigate to the application again</li>
+            <li>Verify you're still authenticated</li>
+        </ol>
+    </div>
+
+    <div class="test-section">
+        <h3>Expected Behavior (After Fix):</h3>
+        <ul>
+            <li>✅ App shows loading spinner during initialization</li>
+            <li>✅ After login, page refresh keeps you authenticated</li>
+            <li>✅ New tabs/windows preserve authentication state</li>
+            <li>✅ No unexpected redirects to login screen</li>
+            <li>✅ Authentication state persists across browser sessions</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h3>Previous Buggy Behavior:</h3>
+        <ul>
+            <li>❌ Page refresh immediately redirected to login</li>
+            <li>❌ No loading state during auth verification</li>
+            <li>❌ Race condition between auth stores</li>
+            <li>❌ Authentication state lost on page reload</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h3>Technical Fix Summary:</h3>
+        <ul>
+            <li><strong>Added isInitializing state</strong> to prevent premature redirects</li>
+            <li><strong>Improved initializeAuth()</strong> with proper async handling</li>
+            <li><strong>Enhanced session validation</strong> for persisted users</li>
+            <li><strong>Added loading screens</strong> during authentication verification</li>
+            <li><strong>Fixed race conditions</strong> between authStore and userStore</li>
+        </ul>
+    </div>
+
+    <div class="test-section warning">
+        <h3>Mock Mode Credentials:</h3>
+        <ul>
+            <li><strong>Admin:</strong> admin@salestracker.com / admin123</li>
+            <li><strong>Manager:</strong> manager@salestracker.com / manager123</li>
+            <li><strong>Sales Rep:</strong> sales@salestracker.com / sales123</li>
+        </ul>
+    </div>
+
+    <script>
+        // Simple localStorage inspection tool
+        function checkAuthState() {
+            const authStorage = localStorage.getItem('auth-storage');
+            const userStorage = localStorage.getItem('user-storage');
+            
+            console.log('=== Authentication State Check ===');
+            console.log('Auth Storage:', authStorage ? JSON.parse(authStorage) : 'None');
+            console.log('User Storage:', userStorage ? JSON.parse(userStorage) : 'None');
+            
+            const output = document.getElementById('storage-output');
+            if (output) {
+                output.innerHTML = `
+                    <h4>Current localStorage State:</h4>
+                    <pre>${JSON.stringify({
+                        authStorage: authStorage ? JSON.parse(authStorage) : null,
+                        userStorage: userStorage ? JSON.parse(userStorage) : null
+                    }, null, 2)}</pre>
+                `;
+            }
+        }
+
+        function clearAuthState() {
+            localStorage.removeItem('auth-storage');
+            localStorage.removeItem('user-storage');
+            alert('Authentication state cleared! Refresh SalesTracker to test fresh state.');
+            checkAuthState();
+        }
+    </script>
+
+    <div class="test-section">
+        <h3>Debug Tools:</h3>
+        <button onclick="checkAuthState()">Check Current Auth State</button>
+        <button onclick="clearAuthState()">Clear Auth State</button>
+        <div id="storage-output"></div>
+    </div>
+</body>
+</html>

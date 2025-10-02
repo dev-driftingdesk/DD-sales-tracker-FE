@@ -27,21 +27,25 @@ function App() {
   const [activeModule, setActiveModule] = useState('performance'); // Start with performance to show Module 2
   const [showAssistant, setShowAssistant] = useState(false);
   const { unreadCount, initializeNotifications } = useNotificationStore();
-  const { isAuthenticated, user, logout, initializeAuth, checkAuthStatus } = useAuthStore();
+  const { isAuthenticated, user, logout, initializeAuth, checkAuthStatus, isInitializing } = useAuthStore();
   const { initializeSession } = useUserStore();
   const { products, addProduct, getStatistics } = useCRMStore();
 
   // Initialize authentication, user session and notifications on mount
   useEffect(() => {
     const initializeApp = async () => {
-      // Initialize authentication first (checks API tokens if API integration enabled)
-      await initializeAuth();
-      
-      // Initialize user session from localStorage (for mock mode)
-      initializeSession();
-      
-      // Initialize notifications
-      initializeNotifications();
+      try {
+        // Initialize authentication first (checks API tokens if API integration enabled)
+        await initializeAuth();
+        
+        // Initialize user session from localStorage (for mock mode compatibility)
+        initializeSession();
+        
+        // Initialize notifications
+        initializeNotifications();
+      } catch (error) {
+        console.error('App initialization failed:', error);
+      }
     };
     
     initializeApp();
@@ -227,7 +231,19 @@ function App() {
     logout();
   };
 
-  // Show authentication screen if not authenticated
+  // Show loading screen while initializing authentication
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Initializing SalesTracker...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show authentication screen if not authenticated (after initialization)
   if (!isAuthenticated) {
     return <AuthContainer onAuthSuccess={handleAuthSuccess} />;
   }

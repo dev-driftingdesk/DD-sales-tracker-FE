@@ -1,0 +1,177 @@
+work_item_id: BUG-001-PRB-003
+parent_id: BUG-001
+title: Implement Pure Backend API Authentication - Remove All Mock Data
+type: prb
+status: ready
+priority: critical
+complexity: 15
+estimated_hours: 6
+
+context:
+  system_nature: CODE-BASED SYSTEM
+  project_root: /Users/vevomalik/Desktop/DD-sales-tracker-FE
+  current_date: 2025-01-02
+  
+  # Project Context
+  project_description: "SalesTracker CRM - React 19.1.0 frontend application requiring pure backend API authentication"
+  technology_stack: "React 19.1.0, Zustand 5.0.6, Backend API at localhost:5555"
+  
+  # Critical Issue Context
+  issue_description: "Hybrid authentication system with mock fallbacks interferes with pure backend API authentication, causing session persistence failures"
+  user_requirement: "Remove ALL mock data and implement pure backend API authentication only - no mock fallbacks allowed"
+  backend_api: "http://localhost:5555 - backend server available and configured"
+  
+  # Critical Files
+  critical_files:
+    - path: /Users/vevomalik/Desktop/DD-sales-tracker-FE/src/services/auth/authService.js
+      purpose: Authentication service with extensive mock fallback logic that must be removed
+      sample: "// Mock users data (fallback when API is not enabled) const MOCK_USERS = ["
+      
+    - path: /Users/vevomalik/Desktop/DD-sales-tracker-FE/src/modules/auth/stores/authStore.js
+      purpose: Authentication store with mock user database and hybrid authentication logic
+      sample: "users: [ { id: '1', email: 'admin@salestracker.com', password: 'admin123'"
+      
+    - path: /Users/vevomalik/Desktop/DD-sales-tracker-FE/src/services/auth/tokenManager.js
+      purpose: Token management that handles both real JWT and mock tokens
+      sample: "Store authentication tokens securely, validate token format, manage expiration"
+      
+    - path: /Users/vevomalik/Desktop/DD-sales-tracker-FE/src/services/api/config.js
+      purpose: API configuration with backend URL already configured for localhost:5555
+      sample: "baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5147'"
+      
+    - path: /Users/vevomalik/Desktop/DD-sales-tracker-FE/.env.development
+      purpose: Environment configuration with API integration enabled
+      sample: "VITE_ENABLE_API_INTEGRATION=true, VITE_API_BASE_URL=http://localhost:5555"
+
+  # User Requirements
+  user_requirements:
+    original_request: "CRITICAL: IMPLEMENT PURE BACKEND API AUTHENTICATION - NO MOCK DATA. Fix session persistence by removing all mock authentication logic and using only real backend APIs"
+    work_type: "critical_refactoring"
+    success_criteria:
+      - "NO MOCK DATA anywhere in the authentication system"
+      - "Only real backend APIs used for all authentication operations"
+      - "Session persistence works reliably with backend API tokens only"
+      - "No mock fallbacks or hybrid authentication logic"
+      - "User stays authenticated after browser refresh using real API validation"
+    scope_limits:
+      - "Remove all mock authentication logic completely"
+      - "Use only localhost:5555 backend APIs for authentication"
+      - "Maintain existing API integration configuration"
+      - "Preserve user experience but with real authentication only"
+
+role_assignments:
+  primary: "@Developer"
+  reviewers: ["@QA-Engineer"]
+  stakeholders: ["@PM"]
+
+requirements:
+  functional:
+    - "Remove MOCK_USERS array and all mock user data from authService.js"
+    - "Delete generateMockTokens() function and all mock token generation logic"
+    - "Remove mock user database from authStore.js (lines 24-52)"
+    - "Eliminate authSource tracking ('mock' vs 'api') from authentication store"
+    - "Remove mock fallback logic from login() function in authService.js (lines 122-163)"
+    - "Simplify checkAuthStatus() to use only real backend API validation"
+    - "Remove mock token detection and validation from tokenManager"
+    - "Update getProfile() to use only real backend /auth/profile endpoint"
+    - "Configure authentication to use only localhost:5555 backend APIs"
+    - "Remove all mock authentication paths from registration and password reset"
+    
+  processual:
+    - "Ensure API configuration points to correct backend URL (localhost:5555)"
+    - "Verify all authentication endpoints use real backend APIs"
+    - "Test authentication flow with only backend API calls"
+    - "Validate session persistence using real JWT tokens only"
+    - "Remove any remaining mock logic or debugging code"
+    
+  validation:
+    - "Authentication works purely through backend APIs at localhost:5555"
+    - "No mock data or fallback logic remains in any file"
+    - "Session persistence works reliably after browser refresh"
+    - "Login/logout/registration use only real backend endpoints"
+    - "Token validation uses only real JWT tokens from backend"
+
+implementation_approach: |
+  **PHASE 1: Remove Mock Infrastructure from authService.js**
+  - Delete MOCK_USERS array (lines 24-53)
+  - Remove generateMockTokens() function (lines 60-92)
+  - Delete mock fallback logic in login() function (lines 122-163)
+  - Simplify login() to use only API calls without fallback
+  - Remove mock logic from register(), resetPassword(), confirmPasswordReset()
+  - Update getProfile() to use only real backend API
+  
+  **PHASE 2: Clean Up authStore.js**
+  - Remove mock users database (lines 24-52)
+  - Delete authSource tracking ('mock' vs 'api')
+  - Simplify checkAuthStatus() to use only API validation
+  - Remove mock authentication logic from initializeAuth()
+  - Remove hybrid authentication validation paths
+  - Use only real JWT tokens for session persistence
+  
+  **PHASE 3: Streamline Token Management**
+  - Remove mock token detection logic from tokenManager
+  - Use only real JWT token validation
+  - Simplify token format validation for real JWTs only
+  - Remove any mock token signature detection
+  
+  **PHASE 4: Update API Configuration**
+  - Verify backend URL points to localhost:5555
+  - Ensure all authentication endpoints use real backend
+  - Remove mock delay and simulation logic
+  - Configure proper error handling for real API responses
+  
+  **PHASE 5: Testing and Validation**
+  - Test complete authentication flow with backend API only
+  - Verify session persistence with real tokens
+  - Validate no mock logic remains anywhere
+  - Test browser refresh session persistence
+
+workflow:
+  version_bump: true
+  version_type: "minor"
+  changelog_required: true
+  pr_required: false
+  merge_strategy: "direct_commit"
+  release_automation: false
+
+completion_criteria:
+  - "All mock data removed from authentication system"
+  - "No MOCK_USERS arrays or mock token generation functions remain"
+  - "authService.js uses only real backend API calls"
+  - "authStore.js contains no mock authentication logic"
+  - "Session persistence works with real backend API validation only"
+  - "Authentication flow uses only localhost:5555 backend APIs"
+  - "No authSource tracking or hybrid authentication logic"
+  - "User remains authenticated after browser refresh using real API tokens"
+  - "All authentication operations work through real backend endpoints"
+
+dependencies: ["BUG-001-PRB-001", "BUG-001-PRB-002"]
+blockers: []
+related_work_items: ["BUG-001", "BUG-001-PRB-001", "BUG-001-PRB-002"]
+
+notes: |
+  This PRB addresses the core requirement for pure backend API authentication by completely removing
+  the hybrid authentication system that was interfering with session persistence.
+  
+  **Critical Changes:**
+  1. Complete removal of all mock authentication infrastructure
+  2. Elimination of fallback logic that caused authentication source confusion
+  3. Simplification to pure backend API authentication paths only
+  4. Streamlined session management using only real JWT tokens
+  
+  **Expected Outcome:**
+  - Reliable session persistence using backend API validation
+  - No confusion between mock and real authentication sources
+  - Simplified debugging and maintenance
+  - Production-ready authentication system without development scaffolding
+  
+  **Backend Requirement:**
+  - Backend server must be running on localhost:5555
+  - Backend must implement standard authentication endpoints:
+    - POST /api/v1/auth/login
+    - GET /api/v1/auth/profile  
+    - POST /api/v1/auth/refresh
+    - POST /api/v1/auth/logout
+
+created_date: 2025-01-02
+estimated_completion: 2025-01-02
