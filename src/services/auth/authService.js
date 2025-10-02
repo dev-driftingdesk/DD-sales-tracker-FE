@@ -388,6 +388,30 @@ export const getProfile = async () => {
       user: response.user
     };
   } catch (error) {
+    // Log the error for debugging
+    console.error('[AuthService] Profile fetch failed:', error);
+    
+    // Check if it's a network error (backend not available)
+    if (error.code === 'ECONNREFUSED' || 
+        error.message?.includes('NetworkError') ||
+        error.message?.includes('fetch') ||
+        error.name === 'NetworkError' ||
+        !navigator.onLine) {
+      
+      console.warn('[AuthService] Network error detected - backend may be unavailable');
+      
+      // For network errors, try to get user from token if available
+      const userFromToken = getCurrentUser();
+      if (userFromToken && !tokenManager.isTokenExpired()) {
+        console.log('[AuthService] Using token-based user for offline mode');
+        return {
+          success: true,
+          user: userFromToken,
+          offline: true
+        };
+      }
+    }
+    
     if (error instanceof ApiError) {
       throw error;
     }
@@ -405,7 +429,10 @@ export const getProfile = async () => {
  * @returns {boolean} True if authenticated
  */
 export const isAuthenticated = () => {
-  return tokenManager.hasAccessToken() && !tokenManager.isTokenExpired();
+  const hasToken = tokenManager.hasAccessToken();
+  const isExpired = tokenManager.isTokenExpired();
+  console.log('[AuthService] isAuthenticated check:', { hasToken, isExpired, result: hasToken && !isExpired });
+  return hasToken && !isExpired;
 };
 
 /**

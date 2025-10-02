@@ -27,24 +27,31 @@ function App() {
   const [activeModule, setActiveModule] = useState('performance'); // Start with performance to show Module 2
   const [showAssistant, setShowAssistant] = useState(false);
   const { unreadCount, initializeNotifications } = useNotificationStore();
-  const { isAuthenticated, user, logout, initializeAuth, checkAuthStatus, isInitializing } = useAuthStore();
+  const { isAuthenticated, user, logout, initializeAuth, checkAuthStatus, isInitializing, error: authError } = useAuthStore();
   const { initializeSession } = useUserStore();
   const { products, addProduct, getStatistics } = useCRMStore();
 
   // Initialize authentication, user session and notifications on mount
   useEffect(() => {
     const initializeApp = async () => {
+      console.log('[App] Starting application initialization...');
+      
       try {
         // Initialize authentication first (checks API tokens if API integration enabled)
+        console.log('[App] Initializing authentication...');
         await initializeAuth();
         
         // Initialize user session from localStorage (for mock mode compatibility)
+        console.log('[App] Initializing user session...');
         initializeSession();
         
         // Initialize notifications
+        console.log('[App] Initializing notifications...');
         initializeNotifications();
+        
+        console.log('[App] Application initialization completed');
       } catch (error) {
-        console.error('App initialization failed:', error);
+        console.error('[App] Application initialization failed:', error);
       }
     };
     
@@ -71,15 +78,29 @@ function App() {
   useEffect(() => {
     const handleAuthLogout = async (event) => {
       // API client detected authentication failure
-      console.log('Authentication failure detected, checking auth status...');
+      console.log('[App] Authentication failure detected, checking auth status...');
       await checkAuthStatus();
+    };
+
+    const handleTokensUpdated = (event) => {
+      console.log('[App] Tokens updated, refreshing auth state...');
+      checkAuthStatus();
+    };
+
+    const handleTokensCleared = (event) => {
+      console.log('[App] Tokens cleared, updating auth state...');
+      checkAuthStatus();
     };
 
     // Listen for auth events from API client
     window.addEventListener('auth:logout', handleAuthLogout);
+    window.addEventListener('auth:tokens-updated', handleTokensUpdated);
+    window.addEventListener('auth:tokens-cleared', handleTokensCleared);
 
     return () => {
       window.removeEventListener('auth:logout', handleAuthLogout);
+      window.removeEventListener('auth:tokens-updated', handleTokensUpdated);
+      window.removeEventListener('auth:tokens-cleared', handleTokensCleared);
     };
   }, [checkAuthStatus]);
 
@@ -224,7 +245,7 @@ function App() {
 
   const handleAuthSuccess = (user) => {
     // Authentication successful, the store will handle the state
-    console.log('User authenticated:', user);
+    console.log('[App] User authenticated:', user);
   };
 
   const handleLogout = () => {
@@ -238,6 +259,9 @@ function App() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Initializing SalesTracker...</p>
+          {authError && (
+            <p className="text-red-500 text-sm mt-2">Authentication error: {authError}</p>
+          )}
         </div>
       </div>
     );

@@ -293,18 +293,26 @@ const useUserStore = create(
       initializeSession: () => {
         const { currentUser, isAuthenticated } = get();
         
+        console.log('[UserStore] Initializing session - current state:', { 
+          hasUser: !!currentUser, 
+          isAuthenticated,
+          userEmail: currentUser?.email 
+        });
+        
         // Only initialize if we don't have a current user
         // This allows authStore to take precedence
         if (!currentUser && !isAuthenticated) {
           // Set default user for demo if no persisted user
-          console.log('UserStore: Initializing default demo user');
+          console.log('[UserStore] No persisted user found, initializing default demo user');
           set({ currentUser: mockUsers[3], isAuthenticated: true });
         } else if (currentUser && isAuthenticated) {
           // Validate the persisted user still exists
           const validUser = mockUsers.find(u => u.id === currentUser.id);
           if (!validUser) {
-            console.log('UserStore: Persisted user no longer valid, clearing session');
+            console.log('[UserStore] Persisted user no longer valid, clearing session');
             set({ currentUser: null, isAuthenticated: false });
+          } else {
+            console.log('[UserStore] Valid persisted user found:', validUser.email);
           }
         }
       }
