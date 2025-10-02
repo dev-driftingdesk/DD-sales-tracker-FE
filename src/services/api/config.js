@@ -6,7 +6,7 @@
 // Environment configuration with defaults
 const config = {
   // API Base Configuration
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5147',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5555',
   timeout: parseInt(import.meta.env.VITE_API_TIMEOUT) || 10000,
   
   // Authentication Configuration
