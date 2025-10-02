@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import authService from '../../../services/auth/authService.js';
 import { isApiEnabled } from '../../../services/api/config.js';
 import { ApiError } from '../../../services/api/errorHandler.js';
+import tokenManager from '../../../services/auth/tokenManager.js';
 
 const useAuthStore = create(
   persist(
@@ -301,6 +302,70 @@ const useAuthStore = create(
         set(state => ({
           user: state.user ? { ...state.user, ...updates } : null
         }));
+      },
+
+      // Check authentication status when API integration is enabled
+      checkAuthStatus: async () => {
+        const state = get();
+        
+        // If API integration is disabled, use persisted state
+        if (!state.useApiIntegration) {
+          return state.isAuthenticated;
+        }
+        
+        // For API integration, check if we have valid tokens
+        try {
+          if (!authService.isAuthenticated()) {
+            // No valid token, user is not authenticated
+            set({
+              user: null,
+              isAuthenticated: false,
+              error: null
+            });
+            return false;
+          }
+          
+          // Try to get current user profile to verify token is still valid
+          const profileResponse = await authService.getProfile();
+          if (profileResponse.success) {
+            // Token is valid, update user data
+            set({
+              user: profileResponse.user,
+              isAuthenticated: true,
+              error: null
+            });
+            return true;
+          } else {
+            // Token is invalid
+            set({
+              user: null,
+              isAuthenticated: false,
+              error: null
+            });
+            return false;
+          }
+        } catch (error) {
+          // Authentication check failed
+          set({
+            user: null,
+            isAuthenticated: false,
+            error: null
+          });
+          return false;
+        }
+      },
+
+      // Initialize authentication state on app startup
+      initializeAuth: async () => {
+        const state = get();
+        
+        if (!state.useApiIntegration) {
+          // For mock mode, use persisted state
+          return;
+        }
+        
+        // For API mode, verify authentication status
+        await state.checkAuthStatus();
       }
     }),
     {

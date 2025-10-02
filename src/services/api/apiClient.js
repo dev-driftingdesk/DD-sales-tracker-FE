@@ -263,6 +263,19 @@ const createApiClient = () => {
       activeRequests--;
       processQueue();
       
+      // Enhanced error logging for debugging
+      if (getConfig('enableApiLogging')) {
+        console.error('API Error Response:', {
+          url: error.config?.url,
+          method: error.config?.method?.toUpperCase(),
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          headers: error.response?.headers,
+          data: error.response?.data,
+          originalError: error.message
+        });
+      }
+      
       // Handle specific error cases
       const apiError = handleApiError(error, error.config);
       

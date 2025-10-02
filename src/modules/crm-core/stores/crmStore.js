@@ -330,9 +330,19 @@ const useCRMStore = create(
           }));
           return response;
         } catch (error) {
+          // Extract more detailed error message
+          let errorMessage = 'Failed to create contact';
+          if (error instanceof ApiError) {
+            if (error.data && error.data.errors && Array.isArray(error.data.errors)) {
+              errorMessage = error.data.errors.join(', ');
+            } else {
+              errorMessage = error.message;
+            }
+          }
+          
           set({ 
             contactOperationLoading: false,
-            contactOperationError: error instanceof ApiError ? error.message : 'Failed to create contact'
+            contactOperationError: errorMessage
           });
           throw error;
         }

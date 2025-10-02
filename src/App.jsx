@@ -27,15 +27,25 @@ function App() {
   const [activeModule, setActiveModule] = useState('performance'); // Start with performance to show Module 2
   const [showAssistant, setShowAssistant] = useState(false);
   const { unreadCount, initializeNotifications } = useNotificationStore();
-  const { isAuthenticated, user, logout } = useAuthStore();
+  const { isAuthenticated, user, logout, initializeAuth, checkAuthStatus } = useAuthStore();
   const { initializeSession } = useUserStore();
   const { products, addProduct, getStatistics } = useCRMStore();
 
-  // Initialize user session and notifications on mount
+  // Initialize authentication, user session and notifications on mount
   useEffect(() => {
-    initializeSession(); // Initialize user session from localStorage
-    initializeNotifications();
-  }, []);
+    const initializeApp = async () => {
+      // Initialize authentication first (checks API tokens if API integration enabled)
+      await initializeAuth();
+      
+      // Initialize user session from localStorage (for mock mode)
+      initializeSession();
+      
+      // Initialize notifications
+      initializeNotifications();
+    };
+    
+    initializeApp();
+  }, [initializeAuth, initializeSession, initializeNotifications]);
 
   // Initialize email integrations and external monitoring
   useEffect(() => {
@@ -52,6 +62,22 @@ function App() {
       externalEmailMonitor.stopMonitoring();
     };
   }, []);
+
+  // Listen for authentication events from API client
+  useEffect(() => {
+    const handleAuthLogout = async (event) => {
+      // API client detected authentication failure
+      console.log('Authentication failure detected, checking auth status...');
+      await checkAuthStatus();
+    };
+
+    // Listen for auth events from API client
+    window.addEventListener('auth:logout', handleAuthLogout);
+
+    return () => {
+      window.removeEventListener('auth:logout', handleAuthLogout);
+    };
+  }, [checkAuthStatus]);
 
   // Initialize CRM products if not already present
   useEffect(() => {

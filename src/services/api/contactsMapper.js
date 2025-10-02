@@ -238,15 +238,27 @@ export const mapContactErrorResponse = (errorResponse) => {
   if (errorResponse.errors && typeof errorResponse.errors === 'object' && !Array.isArray(errorResponse.errors)) {
     // Validation errors format: { "FieldName": ["Error message"] }
     const validationErrors = [];
+    const fieldErrors = {};
+    
     Object.keys(errorResponse.errors).forEach(field => {
       if (Array.isArray(errorResponse.errors[field])) {
-        validationErrors.push(...errorResponse.errors[field]);
+        // Store field-specific errors
+        fieldErrors[field] = errorResponse.errors[field];
+        // Create user-friendly messages
+        errorResponse.errors[field].forEach(error => {
+          validationErrors.push(`${field}: ${error}`);
+        });
+      } else {
+        // Handle single error string
+        fieldErrors[field] = [errorResponse.errors[field]];
+        validationErrors.push(`${field}: ${errorResponse.errors[field]}`);
       }
     });
     
     return {
-      message: errorResponse.title || errorResponse.message || 'Contact validation failed',
+      message: errorResponse.title || errorResponse.message || 'Please check the following validation errors',
       errors: validationErrors,
+      fieldErrors: fieldErrors,
       status: errorResponse.status || 400,
       type: 'validation'
     };
@@ -254,8 +266,8 @@ export const mapContactErrorResponse = (errorResponse) => {
   
   // Handle standard CeedPods error format
   return {
-    message: errorResponse.message || 'Contact operation failed',
-    errors: Array.isArray(errorResponse.errors) ? errorResponse.errors : [errorResponse.message || 'Unknown contact error'],
+    message: errorResponse.message || errorResponse.title || 'Contact operation failed',
+    errors: Array.isArray(errorResponse.errors) ? errorResponse.errors : [errorResponse.message || errorResponse.title || 'Unknown contact error'],
     status: errorResponse.status || 500,
     type: 'general'
   };

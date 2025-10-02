@@ -128,16 +128,42 @@ export const parseApiError = (error) => {
     // Extract error message from response
     const responseData = error.response.data;
     if (responseData) {
+      // Store the complete response data for detailed debugging
+      data = responseData;
+      
       if (typeof responseData === 'string') {
         message = responseData;
       } else if (responseData.message) {
         message = responseData.message;
+      } else if (responseData.title) {
+        message = responseData.title;
       } else if (responseData.error) {
         message = responseData.error;
-      } else if (responseData.errors && Array.isArray(responseData.errors)) {
-        message = responseData.errors.join(', ');
+      } else if (responseData.errors) {
+        // Handle .NET validation errors format: { "FieldName": ["Error message"] }
+        if (typeof responseData.errors === 'object' && !Array.isArray(responseData.errors)) {
+          const validationErrors = [];
+          const fieldErrors = {}; // For field-specific error mapping
+          
+          Object.keys(responseData.errors).forEach(field => {
+            if (Array.isArray(responseData.errors[field])) {
+              fieldErrors[field] = responseData.errors[field];
+              responseData.errors[field].forEach(error => {
+                validationErrors.push(`${field}: ${error}`);
+              });
+            } else {
+              fieldErrors[field] = [responseData.errors[field]];
+              validationErrors.push(`${field}: ${responseData.errors[field]}`);
+            }
+          });
+          
+          // Add field errors to data for component access
+          data = { ...responseData, fieldErrors };
+          message = validationErrors.join(', ');
+        } else if (Array.isArray(responseData.errors)) {
+          message = responseData.errors.join(', ');
+        }
       }
-      data = responseData;
     }
   } else if (error.request) {
     // Request was made but no response received

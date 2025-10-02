@@ -10,6 +10,7 @@
  */
 
 import { createApiService, isApiEnabled, getApiEndpoints, mockDelay } from '../api/index.js';
+import { getConfig } from '../api/config.js';
 import { ApiError, ERROR_TYPES } from '../api/errorHandler.js';
 import useUserStore from '../../stores/userStore.jsx';
 import {
@@ -283,18 +284,55 @@ export const createContact = async (contactData) => {
     };
 
     if (isApiEnabled()) {
-      // Use CeedPods API
-      const requestData = mapContactToApi(contactWithUser);
-      const response = await contactApiService.post(getApiEndpoints().contacts.create, requestData);
-      
-      // Transform CeedPods response to frontend format
-      const mappedResponse = mapContactSuccessResponse(response);
-      
-      return {
-        success: true,
-        data: mappedResponse.data,
-        message: mappedResponse.message
-      };
+      try {
+        // Use CeedPods API
+        const requestData = mapContactToApi(contactWithUser);
+        
+        // Log request data for debugging when API logging is enabled
+        if (getConfig('enableApiLogging')) {
+          console.log('Contact Creation Request:', {
+            url: getApiEndpoints().contacts.create,
+            method: 'POST',
+            data: requestData,
+            originalData: contactWithUser
+          });
+        }
+        
+        const response = await contactApiService.post(getApiEndpoints().contacts.create, requestData);
+        
+        // Transform CeedPods response to frontend format
+        const mappedResponse = mapContactSuccessResponse(response);
+        
+        return {
+          success: true,
+          data: mappedResponse.data,
+          message: mappedResponse.message
+        };
+      } catch (error) {
+        // Log detailed error information for debugging
+        if (getConfig('enableApiLogging')) {
+          console.error('Contact Creation Error:', {
+            url: getApiEndpoints().contacts.create,
+            method: 'POST',
+            requestData: mapContactToApi(contactWithUser),
+            error: error.response?.data || error.message,
+            status: error.response?.status,
+            headers: error.response?.headers
+          });
+        }
+        
+        // Handle authentication errors specifically
+        if (error.type === 'AUTHENTICATION_ERROR' || error.status === 401) {
+          throw new ApiError(
+            'Please log in to create contacts. You need to be authenticated to perform this action.',
+            'AUTHENTICATION_ERROR',
+            401,
+            error
+          );
+        }
+        // Re-throw other errors
+        throw error;
+      }
     } else {
       // Use mock data with delay
       await mockDelay();

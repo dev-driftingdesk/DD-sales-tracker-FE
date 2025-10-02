@@ -17,9 +17,14 @@ export default function ContactForm({ onClose }) {
     notes: ''
   });
   const [newTag, setNewTag] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Clear previous field errors
+    setFieldErrors({});
+    
     if (!formData.name || !formData.email) {
       alert('Name and email are required');
       return;
@@ -29,8 +34,31 @@ export default function ContactForm({ onClose }) {
       await addContact(formData);
       onClose();
     } catch (error) {
-      // Error is already handled in the store and shown via contactOperationError
-      console.error('Failed to create contact:', error);
+      // Enhanced error logging for debugging validation issues
+      console.error('Failed to create contact:', {
+        error: error,
+        errorType: error.type,
+        errorStatus: error.status,
+        errorData: error.data,
+        fieldErrors: error.data?.fieldErrors
+      });
+      
+      // Extract field-specific errors if available
+      if (error.data && error.data.fieldErrors) {
+        // Map backend field names to frontend field names
+        const mappedFieldErrors = {};
+        Object.keys(error.data.fieldErrors).forEach(field => {
+          // Handle phone field mapping (backend might use PhoneNumber, frontend uses phone)
+          const frontendFieldName = field.toLowerCase() === 'phonenumber' ? 'phoneNumber' : field;
+          mappedFieldErrors[frontendFieldName] = error.data.fieldErrors[field];
+        });
+        setFieldErrors(mappedFieldErrors);
+      }
+      
+      // Show specific alert for authentication errors
+      if (error.type === 'AUTHENTICATION_ERROR' || error.status === 401) {
+        alert('Authentication required: Please log in to create contacts.');
+      }
     }
   };
 
@@ -87,7 +115,20 @@ export default function ContactForm({ onClose }) {
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
           {contactOperationError && (
             <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <h4 className="text-red-800 font-medium mb-2">Error Creating Contact</h4>
               <p className="text-red-600 text-sm">{contactOperationError}</p>
+              {Object.keys(fieldErrors).length > 0 && (
+                <div className="mt-3">
+                  <p className="text-red-700 text-xs font-medium mb-1">Field-specific errors:</p>
+                  <ul className="text-red-600 text-xs space-y-1">
+                    {Object.entries(fieldErrors).map(([field, errors]) => (
+                      <li key={field}>
+                        <strong>{field}:</strong> {Array.isArray(errors) ? errors.join(', ') : errors}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
           
@@ -100,10 +141,19 @@ export default function ContactForm({ onClose }) {
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent ${
+                  (fieldErrors.name || fieldErrors.Name) ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                }`}
                 placeholder="John Doe"
                 required
               />
+              {(fieldErrors.name || fieldErrors.Name) && (
+                <div className="mt-1 text-sm text-red-600">
+                  {(fieldErrors.name || fieldErrors.Name)?.map((error, index) => (
+                    <div key={index}>{error}</div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div>
@@ -114,10 +164,19 @@ export default function ContactForm({ onClose }) {
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent ${
+                  (fieldErrors.email || fieldErrors.Email) ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                }`}
                 placeholder="john@example.com"
                 required
               />
+              {(fieldErrors.email || fieldErrors.Email) && (
+                <div className="mt-1 text-sm text-red-600">
+                  {(fieldErrors.email || fieldErrors.Email)?.map((error, index) => (
+                    <div key={index}>{error}</div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div>
@@ -128,9 +187,18 @@ export default function ContactForm({ onClose }) {
                 type="text"
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent ${
+                  (fieldErrors.title || fieldErrors.Title) ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                }`}
                 placeholder="Sales Manager"
               />
+              {(fieldErrors.title || fieldErrors.Title) && (
+                <div className="mt-1 text-sm text-red-600">
+                  {(fieldErrors.title || fieldErrors.Title)?.map((error, index) => (
+                    <div key={index}>{error}</div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div>
@@ -141,9 +209,18 @@ export default function ContactForm({ onClose }) {
                 type="tel"
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent ${
+                  (fieldErrors.phoneNumber || fieldErrors.phone || fieldErrors.Phone || fieldErrors.PhoneNumber) ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                }`}
                 placeholder="+1 (555) 123-4567"
               />
+              {(fieldErrors.phoneNumber || fieldErrors.phone || fieldErrors.Phone || fieldErrors.PhoneNumber) && (
+                <div className="mt-1 text-sm text-red-600">
+                  {(fieldErrors.phoneNumber || fieldErrors.phone || fieldErrors.Phone || fieldErrors.PhoneNumber)?.map((error, index) => (
+                    <div key={index}>{error}</div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div>
@@ -154,7 +231,9 @@ export default function ContactForm({ onClose }) {
                 list="companies"
                 value={formData.company}
                 onChange={handleCompanyChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent ${
+                  (fieldErrors.company || fieldErrors.Company) ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                }`}
                 placeholder="Select or type company name"
               />
               <datalist id="companies">
@@ -162,6 +241,13 @@ export default function ContactForm({ onClose }) {
                   <option key={company.id} value={company.name} />
                 ))}
               </datalist>
+              {(fieldErrors.company || fieldErrors.Company) && (
+                <div className="mt-1 text-sm text-red-600">
+                  {(fieldErrors.company || fieldErrors.Company)?.map((error, index) => (
+                    <div key={index}>{error}</div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div>
@@ -202,7 +288,7 @@ export default function ContactForm({ onClose }) {
                   type="text"
                   value={newTag}
                   onChange={(e) => setNewTag(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
+                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
                   className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                   placeholder="Add a tag"
                 />
