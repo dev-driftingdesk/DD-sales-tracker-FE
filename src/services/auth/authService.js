@@ -886,6 +886,15 @@ export const getProfile = async () => {
           offline: true
         };
       }
+      
+      // If no valid token, return failed response but mark as network error
+      console.warn('[AuthService] No valid token available for offline mode');
+      return {
+        success: false,
+        error: 'Backend unavailable and no valid token for offline mode',
+        networkError: true,
+        offline: true
+      };
     }
     
     if (error instanceof ApiError) {

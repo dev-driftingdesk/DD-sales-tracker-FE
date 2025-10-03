@@ -253,6 +253,38 @@ const useAuthStore = create(
             });
             
             return true;
+          } else if (profileResponse.networkError) {
+            // Handle network error response - backend unavailable but preserve session if token exists
+            console.log('[AuthStore] Network error detected, checking token validity...');
+            
+            if (authService.isAuthenticated()) {
+              const userFromToken = authService.getCurrentUser();
+              if (userFromToken) {
+                console.log('[AuthStore] Preserving session with token-based user data due to network error');
+                set({
+                  user: userFromToken,
+                  isAuthenticated: true,
+                  error: null,
+                  authMode: 'mock',
+                  statusMessage: 'Connected in offline mode - backend unavailable',
+                  backendStatus: authService.getBackendStatus()
+                });
+                return true;
+              }
+            }
+            
+            // If no valid token, clear state
+            console.log('[AuthStore] No valid token for offline mode');
+            tokenManager.clearTokens();
+            set({
+              user: null,
+              isAuthenticated: false,
+              error: null,
+              authMode: null,
+              statusMessage: 'Authentication required',
+              backendStatus: authService.getBackendStatus()
+            });
+            return false;
           } else {
             console.log('[AuthStore] Profile verification failed - no user data');
             // Clear tokens and state
