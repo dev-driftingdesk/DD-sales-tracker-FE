@@ -12,7 +12,7 @@
 import { createApiService, isApiEnabled, getApiEndpoints, mockDelay } from '../api/index.js';
 import { getConfig } from '../api/config.js';
 import { ApiError, ERROR_TYPES } from '../api/errorHandler.js';
-import useUserStore from '../../stores/userStore.jsx';
+import useAuthStore from '../../modules/auth/stores/authStore.js';
 import {
   mapContactToFrontend,
   mapContactToApi,
@@ -113,7 +113,7 @@ export const getContacts = async (filters = {}) => {
   try {
     if (isApiEnabled()) {
       // Use CeedPods API
-      const currentUser = useUserStore.getState().currentUser;
+      const currentUser = useAuthStore.getState().user;
       
       // Add user filtering to API filters
       const userFilters = { ...filters };
@@ -142,7 +142,7 @@ export const getContacts = async (filters = {}) => {
       await mockDelay();
       
       // Get current user for filtering
-      const currentUser = useUserStore.getState().currentUser;
+      const currentUser = useAuthStore.getState().user;
       
       // Get non-persistent mock contacts for fallback
       let filteredContacts = getMockContacts();
@@ -277,7 +277,7 @@ export const getContactById = async (id) => {
 export const createContact = async (contactData) => {
   try {
     // Get current user and auto-assign the contact
-    const currentUser = useUserStore.getState().currentUser;
+    const currentUser = useAuthStore.getState().user;
     const contactWithUser = { 
       ...contactData, 
       assignedTo: currentUser?.id || 'user-1' // Fallback to default user

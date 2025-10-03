@@ -15,6 +15,7 @@ import useNotificationStore from './modules/notifications/stores/notificationSto
 import NotificationTest from './modules/notifications/test/NotificationTest';
 import NotificationHelper from './modules/notifications/utils/notificationHelper';
 import AuthContainer from './modules/auth/AuthContainer';
+import AuthErrorBoundary from './components/auth/AuthErrorBoundary';
 import useAuthStore from './modules/auth/stores/authStore';
 import useUserStore from './stores/userStore.jsx';
 import useCRMStore from './modules/crm-core/stores/crmStore';
@@ -22,36 +23,51 @@ import useEmailStore from './modules/email/stores/emailStore';
 import { externalEmailMonitor } from './services/externalEmailMonitor';
 import { initializeEmailIntegrations } from './utils/emailIntegrationUtils';
 import Logo from './components/Logo';
+import AuthClearButton from './components/dev/AuthClearButton';
 
 function App() {
   const [activeModule, setActiveModule] = useState('performance'); // Start with performance to show Module 2
   const [showAssistant, setShowAssistant] = useState(false);
   const { unreadCount, initializeNotifications } = useNotificationStore();
   const { isAuthenticated, user, logout, initializeAuth, checkAuthStatus, isInitializing, error: authError } = useAuthStore();
-  const { initializeSession } = useUserStore();
+  const { initializeSession } = useUserStore(); // Now only handles user preferences
   const { products, addProduct, getStatistics } = useCRMStore();
 
   // Initialize authentication, user session and notifications on mount
+  // Fixed: Sequential initialization pattern to prevent race conditions
   useEffect(() => {
     const initializeApp = async () => {
       console.log('[App] Starting application initialization...');
       
       try {
-        // Initialize authentication first (checks API tokens if API integration enabled)
+        // STEP 1: Initialize authentication FIRST (single source of truth)
         console.log('[App] Initializing authentication...');
         await initializeAuth();
+        console.log('[App] Authentication initialization completed');
         
-        // Initialize user session from localStorage (for mock mode compatibility)
-        console.log('[App] Initializing user session...');
-        initializeSession();
+        // STEP 2: Initialize user preferences (depends on auth completion)
+        console.log('[App] Initializing user preferences...');
+        await new Promise((resolve) => {
+          initializeSession();
+          // Small delay to ensure preferences are set before notifications
+          setTimeout(resolve, 50);
+        });
+        console.log('[App] User preferences initialization completed');
         
-        // Initialize notifications
+        // STEP 3: Initialize notifications (depends on user session)
         console.log('[App] Initializing notifications...');
-        initializeNotifications();
+        await new Promise((resolve) => {
+          initializeNotifications();
+          // Small delay to ensure notifications are properly initialized
+          setTimeout(resolve, 50);
+        });
+        console.log('[App] Notifications initialization completed');
         
-        console.log('[App] Application initialization completed');
+        console.log('[App] Application initialization completed successfully');
       } catch (error) {
         console.error('[App] Application initialization failed:', error);
+        // Don't crash the app on initialization failure
+        console.log('[App] Continuing with partial initialization...');
       }
     };
     
@@ -252,6 +268,15 @@ function App() {
     logout();
   };
 
+  const handleAuthRetry = async () => {
+    console.log('[App] Retrying authentication...');
+    try {
+      await initializeAuth();
+    } catch (error) {
+      console.error('[App] Auth retry failed:', error);
+    }
+  };
+
   // Show loading screen while initializing authentication
   if (isInitializing) {
     return (
@@ -269,13 +294,18 @@ function App() {
 
   // Show authentication screen if not authenticated (after initialization)
   if (!isAuthenticated) {
-    return <AuthContainer onAuthSuccess={handleAuthSuccess} />;
+    return (
+      <AuthErrorBoundary onRetry={handleAuthRetry} onLogout={handleLogout}>
+        <AuthContainer onAuthSuccess={handleAuthSuccess} />
+      </AuthErrorBoundary>
+    );
   }
 
   return (
-    <div className="h-screen flex">
-      {/* Sidebar Navigation */}
-      <div className="w-64 bg-gray-900 text-white flex flex-col h-screen">
+    <AuthErrorBoundary onRetry={handleAuthRetry} onLogout={handleLogout}>
+      <div className="h-screen flex">
+        {/* Sidebar Navigation */}
+        <div className="w-64 bg-gray-900 text-white flex flex-col h-screen">
         <div className="p-6">
           <Logo size="default" textClassName="text-white" />
         </div>
@@ -482,7 +512,11 @@ function App() {
           onNavigate={handleNavigate}
         />
       )}
-    </div>
+
+        {/* Development Authentication Clear Tools */}
+        <AuthClearButton />
+      </div>
+    </AuthErrorBoundary>
   );
 }
 

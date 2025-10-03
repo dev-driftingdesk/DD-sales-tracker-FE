@@ -1,10 +1,12 @@
 import React from 'react';
 import { Calendar, ChevronDown, User, Trophy, TrendingUp } from 'lucide-react';
+import useAuthStore from '../../auth/stores/authStore.js';
 import useUserStore from '../../../stores/userStore.jsx';
 import usePerformanceStore from '../stores/performanceStore';
 
 const DashboardHeader = () => {
-  const { currentUser, users, switchUser } = useUserStore();
+  const { user: currentUser, login, logout } = useAuthStore();
+  const { users } = useUserStore(); // Only get users list for reference
   const { currentPeriod, setPeriod } = usePerformanceStore();
   
   const periods = [
@@ -15,6 +17,24 @@ const DashboardHeader = () => {
   ];
   
   const salesReps = users.filter(u => u.role === 'sales_rep');
+  
+  // Handle user switching through proper authentication
+  const handleUserSwitch = async (userId) => {
+    if (!userId || userId === currentUser?.id) return;
+    
+    const selectedUser = users.find(u => u.id === userId);
+    if (selectedUser) {
+      console.log('[DashboardHeader] Switching to user:', selectedUser.email);
+      try {
+        // Logout current user first
+        await logout();
+        // Login as the selected user (using mock authentication)
+        await login(selectedUser.email, 'demo-password');
+      } catch (error) {
+        console.error('[DashboardHeader] User switch failed:', error);
+      }
+    }
+  };
 
   return (
     <div className="bg-white border-b border-gray-200">
@@ -50,14 +70,14 @@ const DashboardHeader = () => {
             {/* User Switcher (for demo) */}
             <div className="relative">
               <select
-                value={currentUser?.id}
-                onChange={(e) => switchUser(e.target.value)}
+                value={currentUser?.id || ''}
+                onChange={(e) => handleUserSwitch(e.target.value)}
                 className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-8 text-sm font-medium text-gray-700 hover:border-gray-400 focus:ring-2 focus:ring-teal-600 focus:border-teal-600 outline-none cursor-pointer"
               >
                 <option value="" disabled>Switch User</option>
                 {salesReps.map(user => (
                   <option key={user.id} value={user.id}>
-                    {user.name}
+                    {user.name} {user.id === currentUser?.id ? '(Current)' : ''}
                   </option>
                 ))}
               </select>

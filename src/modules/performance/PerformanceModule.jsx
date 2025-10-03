@@ -10,14 +10,14 @@ import PipelineMetricsDashboard from '../../components/PipelineMetricsDashboard'
 import AdvancedLeadMetricsDashboard from '../../components/AdvancedLeadMetricsDashboard';
 import DealActivityMetricsDashboard from '../../components/DealActivityMetricsDashboard';
 import RevenueEngagementMetricsDashboard from '../../components/RevenueEngagementMetricsDashboard';
-import useUserStore from '../../stores/userStore.jsx';
+import useAuthStore from '../auth/stores/authStore.js';
 import usePerformanceStore from './stores/performanceStore';
 import useTeamStore from '../../stores/teamStore';
 import useLeadStore from '../leads/stores/leadStore';
 import useCRMStore from '../crm-core/stores/crmStore';
 
 const PerformanceModule = () => {
-  const { currentUser } = useUserStore();
+  const { user: currentUser } = useAuthStore();
   const { 
     currentPeriod, 
     leaderboard, 

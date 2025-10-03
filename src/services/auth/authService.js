@@ -18,71 +18,30 @@ import {
   mapSuccessResponse
 } from '../api/ceedPodsMapper.js';
 import { getConfig } from '../api/config.js';
+import { getUserByEmail } from '../../data/mockUsers.js';
 
 // Create API service for auth endpoints
 const authApiService = createApiService('');
 
-// Backend connectivity status
+// Backend connectivity status with enhanced race condition protection
 let backendStatus = {
   isAvailable: null, // null = unknown, true = available, false = unavailable
   lastChecked: null,
-  checkInProgress: false
+  checkInProgress: false,
+  consecutiveFailures: 0,
+  circuitBreakerOpen: false,
+  circuitBreakerOpenedAt: null
 };
 
-// Mock user data for fallback authentication
-const mockUsers = [
-  {
-    id: 'user-1',
-    name: 'Sara Ahmed',
-    email: 'sara@salestracker.com',
-    role: 'sales_rep',
-    team: 'team-1',
-    location: 'Jakarta',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sara',
-    language: 'arabic',
-    joinedDate: '2023-01-15',
-    isActive: true
-  },
-  {
-    id: 'user-2',
-    name: 'Maria Rodriguez',
-    email: 'maria@salestracker.com',
-    role: 'sales_rep',
-    team: 'team-2',
-    location: 'London',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Maria',
-    language: 'english',
-    joinedDate: '2023-03-20',
-    isActive: true
-  },
-  {
-    id: 'admin-1',
-    name: 'Admin User',
-    email: 'admin@salestracker.com',
-    role: 'admin',
-    team: null,
-    location: 'Global',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Admin',
-    language: 'english',
-    joinedDate: '2022-01-01',
-    isActive: true
-  },
-  {
-    id: 'demo-1',
-    name: 'Demo User',
-    email: 'demo@salestracker.com',
-    role: 'sales_rep',
-    team: 'team-1',
-    location: 'Demo Location',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Demo',
-    language: 'english',
-    joinedDate: '2024-01-01',
-    isActive: true
-  }
-];
+// Circuit breaker configuration
+const CIRCUIT_BREAKER_CONFIG = {
+  failureThreshold: 3,
+  timeoutMs: 30000, // 30 seconds before circuit breaker resets
+  maxWaitTime: 10000 // 10 seconds max wait for concurrent checks
+};
 
 /**
- * Check if backend API is available
+ * Check if backend API is available with enhanced race condition protection
  * @param {boolean} useCache - Whether to use cached result
  * @returns {Promise<boolean>} True if backend is available
  */
@@ -90,27 +49,74 @@ export const checkBackendAvailability = async (useCache = true) => {
   const now = Date.now();
   const cacheValidTime = 30000; // 30 seconds cache
   
+  // Circuit breaker check - if open and timeout not reached, return cached false
+  if (backendStatus.circuitBreakerOpen) {
+    const timeSinceOpened = now - backendStatus.circuitBreakerOpenedAt;
+    if (timeSinceOpened < CIRCUIT_BREAKER_CONFIG.timeoutMs) {
+      console.log('[AuthService] Circuit breaker open, backend assumed unavailable');
+      return false;
+    } else {
+      // Reset circuit breaker after timeout
+      console.log('[AuthService] Circuit breaker timeout reached, resetting');
+      backendStatus.circuitBreakerOpen = false;
+      backendStatus.consecutiveFailures = 0;
+      backendStatus.circuitBreakerOpenedAt = null;
+    }
+  }
+  
   // Use cached result if available and recent
   if (useCache && backendStatus.lastChecked && 
       (now - backendStatus.lastChecked) < cacheValidTime && 
-      backendStatus.isAvailable !== null) {
+      backendStatus.isAvailable !== null &&
+      !backendStatus.circuitBreakerOpen) {
     console.log('[AuthService] Using cached backend status:', backendStatus.isAvailable);
     return backendStatus.isAvailable;
   }
   
-  // Prevent multiple simultaneous checks
+  // Prevent multiple simultaneous checks with timeout protection
   if (backendStatus.checkInProgress) {
-    console.log('[AuthService] Backend check already in progress, waiting...');
-    // Wait for ongoing check to complete
-    await new Promise(resolve => {
+    console.log('[AuthService] Backend check already in progress, waiting with timeout...');
+    
+    // Wait for ongoing check with maximum timeout
+    const waitStartTime = Date.now();
+    const maxWaitTime = CIRCUIT_BREAKER_CONFIG.maxWaitTime;
+    
+    const waitResult = await new Promise(resolve => {
+      let resolved = false;
+      
+      // Check completion every 100ms
       const checkInterval = setInterval(() => {
-        if (!backendStatus.checkInProgress) {
+        const waitTime = Date.now() - waitStartTime;
+        
+        if (!backendStatus.checkInProgress || waitTime > maxWaitTime) {
           clearInterval(checkInterval);
-          resolve();
+          if (!resolved) {
+            resolved = true;
+            resolve(waitTime > maxWaitTime ? 'timeout' : 'completed');
+          }
         }
       }, 100);
+      
+      // Safety timeout
+      setTimeout(() => {
+        clearInterval(checkInterval);
+        if (!resolved) {
+          resolved = true;
+          resolve('timeout');
+        }
+      }, maxWaitTime + 1000);
     });
-    return backendStatus.isAvailable;
+    
+    if (waitResult === 'timeout') {
+      console.warn('[AuthService] Backend check wait timeout, assuming unavailable');
+      // Force reset the check state and mark as unavailable
+      backendStatus.checkInProgress = false;
+      backendStatus.isAvailable = false;
+      backendStatus.lastChecked = now;
+      return false;
+    }
+    
+    return backendStatus.isAvailable !== null ? backendStatus.isAvailable : false;
   }
   
   backendStatus.checkInProgress = true;
@@ -135,7 +141,13 @@ export const checkBackendAvailability = async (useCache = true) => {
     
     const isAvailable = response.ok || response.status < 500;
     
+    // Reset failure count on successful check
+    if (isAvailable) {
+      backendStatus.consecutiveFailures = 0;
+    }
+    
     backendStatus = {
+      ...backendStatus,
       isAvailable,
       lastChecked: now,
       checkInProgress: false
@@ -147,6 +159,15 @@ export const checkBackendAvailability = async (useCache = true) => {
   } catch (error) {
     console.warn('[AuthService] Backend unavailable:', error.message);
     
+    // Increment failure count and check circuit breaker threshold
+    backendStatus.consecutiveFailures++;
+    
+    if (backendStatus.consecutiveFailures >= CIRCUIT_BREAKER_CONFIG.failureThreshold) {
+      console.warn('[AuthService] Circuit breaker activated due to consecutive failures');
+      backendStatus.circuitBreakerOpen = true;
+      backendStatus.circuitBreakerOpenedAt = now;
+    }
+    
     // Check if it's a network error that suggests backend is down
     const isNetworkError = 
       error.name === 'AbortError' ||
@@ -157,12 +178,16 @@ export const checkBackendAvailability = async (useCache = true) => {
       !navigator.onLine;
     
     backendStatus = {
+      ...backendStatus,
       isAvailable: false,
       lastChecked: now,
       checkInProgress: false
     };
     
     return false;
+  } finally {
+    // Ensure checkInProgress is always reset
+    backendStatus.checkInProgress = false;
   }
 };
 
@@ -186,8 +211,8 @@ export const getBackendStatus = () => {
 const performMockLogin = (email, password) => {
   console.log('[AuthService] Performing mock authentication for:', email);
   
-  // Find user by email
-  const user = mockUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
+  // Find user by email using centralized data source
+  const user = getUserByEmail(email);
   
   if (!user) {
     throw new ApiError(
@@ -219,7 +244,97 @@ const performMockLogin = (email, password) => {
 };
 
 /**
- * Intelligent network error detection
+ * Enhanced error classification for smart authentication error handling
+ * @param {Error} error - Error to analyze
+ * @returns {object} Error classification result
+ */
+export const classifyAuthError = (error) => {
+  // Network connectivity issues
+  if (!navigator.onLine) {
+    return {
+      type: 'network',
+      shouldKeepSession: true,
+      message: 'Network connection unavailable',
+      userMessage: 'You appear to be offline. Please check your connection.'
+    };
+  }
+  
+  // Connection and timeout errors
+  const networkIndicators = [
+    'ECONNREFUSED',
+    'ENOTFOUND', 
+    'ETIMEDOUT',
+    'ECONNRESET',
+    'NetworkError',
+    'Failed to fetch',
+    'fetch',
+    'AbortError',
+    'TimeoutError'
+  ];
+  
+  const errorMessage = error.message || '';
+  const errorCode = error.code || '';
+  const errorName = error.name || '';
+  
+  const isNetworkError = networkIndicators.some(indicator => 
+    errorMessage.includes(indicator) || 
+    errorCode.includes(indicator) ||
+    errorName.includes(indicator)
+  );
+  
+  // HTTP status codes that indicate backend issues (not authentication issues)
+  const backendUnavailableCodes = [404, 502, 503, 504];
+  const isBackendUnavailable = error.status && backendUnavailableCodes.includes(error.status);
+  const responseStatus = error.response?.status;
+  const isResponseUnavailable = responseStatus && backendUnavailableCodes.includes(responseStatus);
+  
+  if (isNetworkError || isBackendUnavailable || isResponseUnavailable) {
+    return {
+      type: 'network',
+      shouldKeepSession: true,
+      message: `Network/backend error: ${errorMessage}`,
+      userMessage: 'Server connection issue. Your session is preserved.'
+    };
+  }
+  
+  // Authentication-specific errors (401, 403)
+  const authErrorCodes = [401, 403];
+  const isAuthError = error.status && authErrorCodes.includes(error.status) ||
+                      responseStatus && authErrorCodes.includes(responseStatus);
+  
+  if (isAuthError) {
+    return {
+      type: 'authentication',
+      shouldKeepSession: false,
+      message: `Authentication error: ${errorMessage}`,
+      userMessage: 'Authentication failed. Please sign in again.'
+    };
+  }
+  
+  // Check for specific authentication-related error messages
+  const authMessages = ['unauthorized', 'forbidden', 'invalid token', 'token expired', 'authentication failed'];
+  const hasAuthMessage = authMessages.some(msg => errorMessage.toLowerCase().includes(msg));
+  
+  if (hasAuthMessage) {
+    return {
+      type: 'authentication',
+      shouldKeepSession: false,
+      message: `Authentication error: ${errorMessage}`,
+      userMessage: 'Your session has expired. Please sign in again.'
+    };
+  }
+  
+  // Unknown errors - be conservative and keep session for now
+  return {
+    type: 'unknown',
+    shouldKeepSession: true,
+    message: `Unknown error: ${errorMessage}`,
+    userMessage: 'An unexpected error occurred. Your session is preserved.'
+  };
+};
+
+/**
+ * Intelligent network error detection (legacy function for backward compatibility)
  * @param {Error} error - Error to analyze
  * @returns {boolean} True if error indicates network/backend unavailability
  */
@@ -287,7 +402,10 @@ export const resetBackendStatus = () => {
   backendStatus = {
     isAvailable: null,
     lastChecked: null,
-    checkInProgress: false
+    checkInProgress: false,
+    consecutiveFailures: 0,
+    circuitBreakerOpen: false,
+    circuitBreakerOpenedAt: null
   };
 };
 
