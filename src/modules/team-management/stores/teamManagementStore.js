@@ -6,87 +6,23 @@ import {
   TEAM_TYPES,
   REGIONS,
   PRODUCT_CATEGORIES 
-} from '../constants';
+} from '../constants/index.js';
+import { teamManagementApi } from '../../../services/team-management/teamManagementApiService.js';
+import { 
+  mapUserFromApi, 
+  mapUserToApi, 
+  mapTeamFromApi, 
+  mapTeamToApi,
+  mapInvitationFromApi,
+  mapInvitationToApi,
+  mapPaginationFromApi,
+  mapFiltersToApi
+} from '../../../services/api/teamManagementMapper.js';
 
 const useTeamManagementStore = create((set, get) => ({
-  // State
-  users: [
-    {
-      id: '1',
-      name: 'John Admin',
-      email: 'john@salestracker.com',
-      role: USER_ROLES.ADMIN,
-      status: USER_STATUS.ACTIVE,
-      avatar: null,
-      phone: '+1-555-0101',
-      regions: Object.values(REGIONS),
-      products: Object.values(PRODUCT_CATEGORIES),
-      teams: ['1'],
-      permissions: DEFAULT_PERMISSIONS[USER_ROLES.ADMIN],
-      createdAt: '2024-01-01T00:00:00Z',
-      lastLogin: '2024-12-01T10:00:00Z',
-      manager: null
-    },
-    {
-      id: '2',
-      name: 'Sarah Manager',
-      email: 'sarah@salestracker.com',
-      role: USER_ROLES.MANAGER,
-      status: USER_STATUS.ACTIVE,
-      avatar: null,
-      phone: '+1-555-0102',
-      regions: [REGIONS.NORTH_AMERICA, REGIONS.EUROPE],
-      products: [PRODUCT_CATEGORIES.BLACK_TEA, PRODUCT_CATEGORIES.GREEN_TEA],
-      teams: ['1', '2'],
-      permissions: DEFAULT_PERMISSIONS[USER_ROLES.MANAGER],
-      createdAt: '2024-01-15T00:00:00Z',
-      lastLogin: '2024-12-01T09:30:00Z',
-      manager: '1'
-    },
-    {
-      id: '3',
-      name: 'Mike Rep',
-      email: 'mike@salestracker.com',
-      role: USER_ROLES.SALES_REP,
-      status: USER_STATUS.ACTIVE,
-      avatar: null,
-      phone: '+1-555-0103',
-      regions: [REGIONS.NORTH_AMERICA],
-      products: [PRODUCT_CATEGORIES.BLACK_TEA],
-      teams: ['2'],
-      permissions: DEFAULT_PERMISSIONS[USER_ROLES.SALES_REP],
-      createdAt: '2024-02-01T00:00:00Z',
-      lastLogin: '2024-12-01T08:45:00Z',
-      manager: '2',
-      commissionPercentage: 5.5
-    }
-  ],
-  
-  teams: [
-    {
-      id: '1',
-      name: 'Leadership Team',
-      description: 'Company leadership and management',
-      type: TEAM_TYPES.CUSTOM,
-      members: ['1', '2'],
-      manager: '1',
-      regions: Object.values(REGIONS),
-      products: Object.values(PRODUCT_CATEGORIES),
-      createdAt: '2024-01-01T00:00:00Z'
-    },
-    {
-      id: '2',
-      name: 'North America Sales',
-      description: 'Sales team covering North American market',
-      type: TEAM_TYPES.REGIONAL,
-      members: ['2', '3'],
-      manager: '2',
-      regions: [REGIONS.NORTH_AMERICA],
-      products: [PRODUCT_CATEGORIES.BLACK_TEA, PRODUCT_CATEGORIES.GREEN_TEA],
-      createdAt: '2024-01-15T00:00:00Z'
-    }
-  ],
-  
+  // State - START WITH EMPTY ARRAYS FOR API-ONLY MODE
+  users: [],
+  teams: [],
   invitations: [],
   
   selectedUser: null,
@@ -94,90 +30,202 @@ const useTeamManagementStore = create((set, get) => ({
   isLoading: false,
   error: null,
   
-  // User management actions
-  createUser: (userData) => {
-    const newUser = {
-      ...userData,
-      id: Date.now().toString(),
-      status: USER_STATUS.ACTIVE,
-      permissions: DEFAULT_PERMISSIONS[userData.role] || [],
-      createdAt: new Date().toISOString(),
-      lastLogin: null
-    };
-    
-    set((state) => ({
-      users: [...state.users, newUser]
-    }));
-    
-    return newUser;
+  // User management actions - API ONLY
+  createUser: async (userData) => {
+    try {
+      set({ isLoading: true, error: null });
+      
+      const apiUserData = mapUserToApi(userData);
+      const response = await teamManagementApi.createUser(apiUserData);
+      const newUser = mapUserFromApi(response.data || response);
+      
+      set((state) => ({
+        users: [...state.users, newUser],
+        isLoading: false
+      }));
+      
+      return newUser;
+    } catch (error) {
+      console.error('Error creating user:', error);
+      set({ 
+        error: error.message || 'Failed to create user',
+        isLoading: false 
+      });
+      throw error;
+    }
   },
   
-  updateUser: (userId, updates) => {
-    set((state) => ({
-      users: state.users.map(user => 
-        user.id === userId 
-          ? { ...user, ...updates, updatedAt: new Date().toISOString() }
-          : user
-      )
-    }));
+  updateUser: async (userId, updates) => {
+    try {
+      set({ isLoading: true, error: null });
+      
+      const apiUserData = mapUserToApi(updates);
+      const response = await teamManagementApi.updateUser(userId, apiUserData);
+      const updatedUser = mapUserFromApi(response.data || response);
+      
+      set((state) => ({
+        users: state.users.map(user => 
+          user.id === userId ? updatedUser : user
+        ),
+        isLoading: false
+      }));
+    } catch (error) {
+      console.error('Error updating user:', error);
+      set({ 
+        error: error.message || 'Failed to update user',
+        isLoading: false 
+      });
+      throw error;
+    }
   },
   
-  deleteUser: (userId) => {
-    set((state) => ({
-      users: state.users.filter(user => user.id !== userId),
-      teams: state.teams.map(team => ({
-        ...team,
-        members: team.members.filter(id => id !== userId)
-      }))
-    }));
+  deleteUser: async (userId) => {
+    try {
+      set({ isLoading: true, error: null });
+      
+      await teamManagementApi.deleteUser(userId);
+      
+      set((state) => ({
+        users: state.users.filter(user => user.id !== userId),
+        teams: state.teams.map(team => ({
+          ...team,
+          members: team.members.filter(id => id !== userId)
+        })),
+        isLoading: false
+      }));
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      set({ 
+        error: error.message || 'Failed to delete user',
+        isLoading: false 
+      });
+      throw error;
+    }
   },
   
-  deactivateUser: (userId) => {
-    get().updateUser(userId, { status: USER_STATUS.INACTIVE });
+  deactivateUser: async (userId) => {
+    try {
+      set({ isLoading: true, error: null });
+      
+      await teamManagementApi.deactivateUser(userId);
+      
+      set((state) => ({
+        users: state.users.map(user => 
+          user.id === userId 
+            ? { ...user, status: USER_STATUS.INACTIVE, updatedAt: new Date().toISOString() }
+            : user
+        ),
+        isLoading: false
+      }));
+    } catch (error) {
+      console.error('Error deactivating user:', error);
+      set({ 
+        error: error.message || 'Failed to deactivate user',
+        isLoading: false 
+      });
+      throw error;
+    }
   },
   
-  reactivateUser: (userId) => {
-    get().updateUser(userId, { status: USER_STATUS.ACTIVE });
+  reactivateUser: async (userId) => {
+    try {
+      set({ isLoading: true, error: null });
+      
+      await teamManagementApi.activateUser(userId);
+      
+      set((state) => ({
+        users: state.users.map(user => 
+          user.id === userId 
+            ? { ...user, status: USER_STATUS.ACTIVE, updatedAt: new Date().toISOString() }
+            : user
+        ),
+        isLoading: false
+      }));
+    } catch (error) {
+      console.error('Error reactivating user:', error);
+      set({ 
+        error: error.message || 'Failed to reactivate user',
+        isLoading: false 
+      });
+      throw error;
+    }
   },
   
   updateUserPermissions: (userId, permissions) => {
     get().updateUser(userId, { permissions });
   },
   
-  // Team management actions
-  createTeam: (teamData) => {
-    const newTeam = {
-      ...teamData,
-      id: Date.now().toString(),
-      members: teamData.members || [],
-      createdAt: new Date().toISOString()
-    };
-    
-    set((state) => ({
-      teams: [...state.teams, newTeam]
-    }));
-    
-    return newTeam;
+  // Team management actions - API ONLY
+  createTeam: async (teamData) => {
+    try {
+      set({ isLoading: true, error: null });
+      
+      const apiTeamData = mapTeamToApi(teamData);
+      const response = await teamManagementApi.createTeam(apiTeamData);
+      const newTeam = mapTeamFromApi(response.data || response);
+      
+      set((state) => ({
+        teams: [...state.teams, newTeam],
+        isLoading: false
+      }));
+      
+      return newTeam;
+    } catch (error) {
+      console.error('Error creating team:', error);
+      set({ 
+        error: error.message || 'Failed to create team',
+        isLoading: false 
+      });
+      throw error;
+    }
   },
   
-  updateTeam: (teamId, updates) => {
-    set((state) => ({
-      teams: state.teams.map(team => 
-        team.id === teamId 
-          ? { ...team, ...updates, updatedAt: new Date().toISOString() }
-          : team
-      )
-    }));
+  updateTeam: async (teamId, updates) => {
+    try {
+      set({ isLoading: true, error: null });
+      
+      const apiTeamData = mapTeamToApi(updates);
+      const response = await teamManagementApi.updateTeam(teamId, apiTeamData);
+      const updatedTeam = mapTeamFromApi(response.data || response);
+      
+      set((state) => ({
+        teams: state.teams.map(team => 
+          team.id === teamId ? updatedTeam : team
+        ),
+        isLoading: false
+      }));
+    } catch (error) {
+      console.error('Error updating team:', error);
+      set({ 
+        error: error.message || 'Failed to update team',
+        isLoading: false 
+      });
+      throw error;
+    }
   },
   
-  deleteTeam: (teamId) => {
-    set((state) => ({
-      teams: state.teams.filter(team => team.id !== teamId),
-      users: state.users.map(user => ({
-        ...user,
-        teams: user.teams.filter(id => id !== teamId)
-      }))
-    }));
+  deleteTeam: async (teamId) => {
+    try {
+      set({ isLoading: true, error: null });
+      
+      await teamManagementApi.deleteTeam(teamId);
+      
+      set((state) => ({
+        teams: state.teams.filter(team => team.id !== teamId),
+        users: state.users.map(user => ({
+          ...user,
+          teams: user.teams.filter(id => id !== teamId)
+        })),
+        isLoading: false
+      }));
+    } catch (error) {
+      console.error('Error deleting team:', error);
+      set({ 
+        error: error.message || 'Failed to delete team',
+        isLoading: false 
+      });
+      throw error;
+    }
   },
   
   addUserToTeam: (userId, teamId) => {
@@ -211,24 +259,31 @@ const useTeamManagementStore = create((set, get) => ({
     }));
   },
   
-  // Invitation management
-  createInvitation: (invitationData) => {
-    const invitation = {
-      ...invitationData,
-      id: Date.now().toString(),
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days
-    };
-    
-    set((state) => ({
-      invitations: [...state.invitations, invitation]
-    }));
-    
-    // Simulate sending email invitation
-    console.log('Invitation sent to:', invitation.email);
-    
-    return invitation;
+  // Invitation management - API ONLY
+  createInvitation: async (invitationData) => {
+    try {
+      set({ isLoading: true, error: null });
+      
+      const apiInvitationData = mapInvitationToApi(invitationData);
+      const response = await teamManagementApi.createInvitation(apiInvitationData);
+      const newInvitation = mapInvitationFromApi(response.data || response);
+      
+      set((state) => ({
+        invitations: [...state.invitations, newInvitation],
+        isLoading: false
+      }));
+      
+      console.log('Invitation sent via API to:', newInvitation.email);
+      
+      return newInvitation;
+    } catch (error) {
+      console.error('Error creating invitation:', error);
+      set({ 
+        error: error.message || 'Failed to create invitation',
+        isLoading: false 
+      });
+      throw error;
+    }
   },
   
   acceptInvitation: (invitationId, userData) => {
@@ -394,7 +449,194 @@ const useTeamManagementStore = create((set, get) => ({
     }
     
     return filteredUsers;
-  }
+  },
+
+  // ========== API DATA LOADING METHODS ==========
+  
+  // Load users from API - NO FALLBACK
+  loadUsers: async (filters = {}) => {
+    try {
+      set({ isLoading: true, error: null });
+      
+      const apiFilters = mapFiltersToApi(filters);
+      const response = await teamManagementApi.getUsers(apiFilters);
+      
+      // Handle both paginated and non-paginated responses
+      let users;
+      if (response.data && Array.isArray(response.data)) {
+        users = response.data.map(mapUserFromApi);
+      } else if (Array.isArray(response)) {
+        users = response.map(mapUserFromApi);
+      } else {
+        users = [];
+      }
+      
+      set({ 
+        users, 
+        isLoading: false 
+      });
+      
+      return users;
+    } catch (error) {
+      console.error('Error loading users:', error);
+      set({ 
+        error: error.message || 'Failed to load users',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+
+  // Load teams from API - NO FALLBACK
+  loadTeams: async (filters = {}) => {
+    try {
+      set({ isLoading: true, error: null });
+      
+      const response = await teamManagementApi.getTeams(filters);
+      
+      // Handle both paginated and non-paginated responses
+      let teams;
+      if (response.data && Array.isArray(response.data)) {
+        teams = response.data.map(mapTeamFromApi);
+      } else if (Array.isArray(response)) {
+        teams = response.map(mapTeamFromApi);
+      } else {
+        teams = [];
+      }
+      
+      set({ 
+        teams, 
+        isLoading: false 
+      });
+      
+      return teams;
+    } catch (error) {
+      console.error('Error loading teams:', error);
+      set({ 
+        error: error.message || 'Failed to load teams',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+
+  // Load invitations from API - NO FALLBACK
+  loadInvitations: async (filters = {}) => {
+    try {
+      set({ isLoading: true, error: null });
+      
+      const response = await teamManagementApi.getInvitations(filters);
+      
+      // Handle both paginated and non-paginated responses
+      let invitations;
+      if (response.data && Array.isArray(response.data)) {
+        invitations = response.data.map(mapInvitationFromApi);
+      } else if (Array.isArray(response)) {
+        invitations = response.map(mapInvitationFromApi);
+      } else {
+        invitations = [];
+      }
+      
+      set({ 
+        invitations, 
+        isLoading: false 
+      });
+      
+      return invitations;
+    } catch (error) {
+      console.error('Error loading invitations:', error);
+      set({ 
+        error: error.message || 'Failed to load invitations',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+
+  // Load all data - API ONLY
+  loadAllData: async () => {
+    try {
+      set({ isLoading: true, error: null });
+      
+      // Load all data in parallel
+      const [usersResult, teamsResult, invitationsResult] = await Promise.allSettled([
+        get().loadUsers(),
+        get().loadTeams(),
+        get().loadInvitations()
+      ]);
+      
+      set({ isLoading: false });
+      
+      return {
+        users: usersResult.status === 'fulfilled' ? usersResult.value : [],
+        teams: teamsResult.status === 'fulfilled' ? teamsResult.value : [],
+        invitations: invitationsResult.status === 'fulfilled' ? invitationsResult.value : []
+      };
+    } catch (error) {
+      console.error('Error loading all data:', error);
+      set({ 
+        error: error.message || 'Failed to load data',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+
+  // Bulk operations - API ONLY
+  bulkUpdateUsers: async (userIds, updates) => {
+    try {
+      set({ isLoading: true, error: null });
+      
+      const bulkData = {
+        userIds: userIds.map(id => parseInt(id)),
+        updates: mapUserToApi(updates)
+      };
+      
+      await teamManagementApi.bulkUpdateUsers(bulkData);
+      
+      // Update local state
+      set((state) => ({
+        users: state.users.map(user => 
+          userIds.includes(user.id)
+            ? { ...user, ...updates, updatedAt: new Date().toISOString() }
+            : user
+        ),
+        isLoading: false
+      }));
+    } catch (error) {
+      console.error('Error bulk updating users:', error);
+      set({ 
+        error: error.message || 'Failed to bulk update users',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+
+  // Initialize store with API data - FORCE API LOAD
+  initialize: async () => {
+    try {
+      console.log('Team Management Store: Initializing with API data (API-only mode)...');
+      await get().loadAllData();
+      console.log('Team Management Store: Successfully initialized with API data');
+    } catch (error) {
+      console.error('Team Management Store: Failed to initialize with API data:', error);
+      // Keep empty arrays - no fallback to mock data
+      set({ 
+        users: [],
+        teams: [],
+        invitations: [],
+        error: 'Failed to load data from API. Please try again.',
+        isLoading: false
+      });
+    }
+  },
+
+  // Clear error state
+  clearError: () => set({ error: null }),
+
+  // Reset loading state
+  resetLoading: () => set({ isLoading: false })
 }));
 
 export default useTeamManagementStore;

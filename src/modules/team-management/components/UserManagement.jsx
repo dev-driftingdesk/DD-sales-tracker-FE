@@ -643,14 +643,18 @@ const UserManagement = () => {
             <div className="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl flex items-center justify-center mx-auto mb-6">
               <Users className="w-12 h-12 text-gray-400" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No users found</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              {users.length === 0 ? 'No users available' : 'No users found'}
+            </h3>
             <p className="text-gray-600 mb-6">
-              {searchQuery || activeFiltersCount > 0 
-                ? 'Try adjusting your search or filters'
-                : 'Get started by adding your first user'
+              {users.length === 0 
+                ? 'Users will appear here once they are loaded from the API.'
+                : searchQuery || activeFiltersCount > 0 
+                  ? 'Try adjusting your search or filters'
+                  : 'Get started by adding your first user'
               }
             </p>
-            {!searchQuery && activeFiltersCount === 0 && (
+            {users.length > 0 && !searchQuery && activeFiltersCount === 0 && (
               <button
                 onClick={() => setShowUserForm(true)}
                 className="px-6 py-3 bg-gradient-to-r from-teal-600 to-cyan-600 text-white rounded-xl hover:shadow-lg transform hover:scale-105 transition-all font-medium"

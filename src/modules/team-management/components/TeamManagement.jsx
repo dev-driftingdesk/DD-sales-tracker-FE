@@ -669,14 +669,18 @@ const TeamManagement = () => {
             <div className="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl flex items-center justify-center mx-auto mb-6">
               <Users className="w-12 h-12 text-gray-400" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No teams found</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              {teams.length === 0 ? 'No teams available' : 'No teams found'}
+            </h3>
             <p className="text-gray-600 mb-6">
-              {searchQuery || filterType
-                ? 'Try adjusting your search or filters'
-                : 'Get started by creating your first team'
+              {teams.length === 0 
+                ? 'Teams will appear here once they are loaded from the API.'
+                : searchQuery || filterType
+                  ? 'Try adjusting your search or filters'
+                  : 'Get started by creating your first team'
               }
             </p>
-            {!searchQuery && !filterType && (
+            {teams.length > 0 && !searchQuery && !filterType && (
               <button
                 onClick={() => setShowTeamForm(true)}
                 className="px-6 py-3 bg-gradient-to-r from-teal-600 to-cyan-600 text-white rounded-xl hover:shadow-lg transform hover:scale-105 transition-all font-medium"
