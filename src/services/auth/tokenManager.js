@@ -302,12 +302,31 @@ export const getUserFromToken = () => {
     return null;
   }
   
-  // Validate required user fields
-  const userId = payload.sub || payload.user_id || payload.id;
-  const userEmail = payload.email;
+  // DEBUG: Log the actual JWT payload to understand backend format
+  console.log('[TokenManager] 🔍 JWT payload contents:', {
+    payload,
+    availableFields: Object.keys(payload),
+    hasId: !!payload.id,
+    hasSub: !!payload.sub,
+    hasUserId: !!payload.user_id,
+    hasEmail: !!payload.email,
+    hasUserEmail: !!payload.user_email,
+    hasNameId: !!payload.nameid
+  });
+  
+  // Validate required user fields - try multiple field patterns
+  const userId = payload.sub || payload.user_id || payload.id || payload.nameid || payload.unique_name;
+  const userEmail = payload.email || payload.user_email || payload.emailaddress;
+  
+  console.log('[TokenManager] 🔍 User identification extraction:', {
+    userId,
+    userEmail,
+    extractionSuccessful: !!(userId && userEmail)
+  });
   
   if (!userId || !userEmail) {
-    console.warn('[TokenManager] Token missing required user identification');
+    console.warn('[TokenManager] ❌ Token missing required user identification');
+    console.warn('[TokenManager] Available payload fields:', Object.keys(payload));
     return null;
   }
   
