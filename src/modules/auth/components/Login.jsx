@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Mail, Lock, Eye, EyeOff, LogIn, Loader2, 
-  AlertCircle, CheckCircle, ArrowRight, 
-  Briefcase, BarChart3, Users
+  AlertCircle, Briefcase, BarChart3, Users
 } from 'lucide-react';
 import useAuthStore from '../stores/authStore';
 import Logo from '../../../components/Logo';
@@ -90,18 +89,6 @@ const Login = ({ onToggleView, onLoginSuccess }) => {
     if (error) clearError();
   };
 
-  const demoCredentials = [
-    { label: 'Vevo Malik', email: 'vevomalik547@gmail.com', password: 'TestPassword123!', role: 'Admin' },
-    { label: 'Sara Ahmed', email: 'sara@salestracker.com', password: 'demo', role: 'Sales Representative (Jakarta)' },
-    { label: 'Maria Rodriguez', email: 'maria@salestracker.com', password: 'demo', role: 'Sales Representative (London)' },
-    { label: 'Demo User', email: 'demo@salestracker.com', password: 'demo', role: 'Sales Representative' }
-  ];
-
-  const fillDemoCredentials = (email, password) => {
-    setFormData({ email, password });
-    setValidationErrors({});
-    clearError();
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-cyan-50 to-blue-50 flex">
@@ -130,48 +117,9 @@ const Login = ({ onToggleView, onLoginSuccess }) => {
                 <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="text-red-800 text-sm">{error}</p>
-                  {/* Show demo credentials hint when backend is unavailable */}
-                  {error.includes('backend') || error.includes('demo') || error.includes('Demo') ? (
-                    <p className="text-red-700 text-xs mt-1">
-                      Try one of the demo accounts below to continue in demo mode.
-                    </p>
-                  ) : null}
                 </div>
               </div>
             )}
-
-            {/* Demo Credentials Section */}
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <CheckCircle className="w-5 h-5 text-blue-600" />
-                <h3 className="font-medium text-blue-900">Demo Accounts</h3>
-              </div>
-              <p className="text-blue-800 text-sm mb-3">
-                Try any of these demo accounts to explore the platform:
-              </p>
-              <div className="grid gap-2">
-                {demoCredentials.map((demo, index) => (
-                  <button
-                    key={index}
-                    type="button"
-                    onClick={() => fillDemoCredentials(demo.email, demo.password)}
-                    className="text-left p-3 bg-white rounded-lg border border-blue-200 hover:border-blue-300 hover:bg-blue-50 transition-colors group"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-medium text-blue-900 text-sm">{demo.label}</div>
-                        <div className="text-blue-700 text-xs">{demo.email}</div>
-                        <div className="text-blue-600 text-xs">{demo.role}</div>
-                      </div>
-                      <ArrowRight className="w-4 h-4 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </div>
-                  </button>
-                ))}
-              </div>
-              <p className="text-blue-700 text-xs mt-2">
-                Click any account to auto-fill the login form.
-              </p>
-            </div>
 
             {/* Email Field */}
             <div>

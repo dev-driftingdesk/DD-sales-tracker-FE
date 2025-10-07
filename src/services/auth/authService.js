@@ -18,7 +18,6 @@ import {
   mapSuccessResponse
 } from '../api/ceedPodsMapper.js';
 import { getConfig } from '../api/config.js';
-import { getUserByEmail } from '../../data/mockUsers.js';
 
 // Create API service for auth endpoints
 const authApiService = createApiService('');
@@ -198,48 +197,7 @@ export const checkBackendAvailability = async (useCache = true) => {
 export const getBackendStatus = () => {
   return {
     ...backendStatus,
-    mode: backendStatus.isAvailable ? 'api' : 'mock'
-  };
-};
-
-/**
- * Mock authentication for fallback mode
- * @param {string} email - User email
- * @param {string} password - User password (optional for demo)
- * @returns {object} Mock authentication result
- */
-const performMockLogin = (email, password) => {
-  console.log('[AuthService] Performing mock authentication for:', email);
-  
-  // Find user by email using centralized data source
-  const user = getUserByEmail(email);
-  
-  if (!user) {
-    throw new ApiError(
-      'User not found. Demo accounts: sara@salestracker.com, maria@salestracker.com, admin@salestracker.com, demo@salestracker.com',
-      ERROR_TYPES.AUTHENTICATION,
-      401
-    );
-  }
-  
-  // For demo purposes, accept any password or no password
-  console.log('[AuthService] Mock authentication successful for:', user.email);
-  
-  // Create mock tokens
-  const mockTokens = {
-    access_token: `mock_token_${user.id}_${Date.now()}`,
-    refresh_token: `mock_refresh_${user.id}_${Date.now()}`,
-    expires_in: 3600 // 1 hour
-  };
-  
-  // Store mock tokens
-  tokenManager.storeTokens(mockTokens.access_token, mockTokens.refresh_token, mockTokens.expires_in);
-  
-  return {
-    success: true,
-    user,
-    tokens: mockTokens,
-    mode: 'mock'
+    mode: backendStatus.isAvailable ? 'api' : 'unavailable'
   };
 };
 
@@ -435,22 +393,6 @@ export const resetBackendStatus = () => {
  * @returns {Promise<object>} Login response
  */
 export const login = async (email, password, rememberMe = false) => {
-  const isApiEnabled = getConfig('enableApiIntegration', false);
-  
-  // If API integration is disabled, use mock immediately
-  if (!isApiEnabled) {
-    console.log('[AuthService] API integration disabled, using mock authentication');
-    return performMockLogin(email, password);
-  }
-  
-  // Check backend availability first
-  const isBackendAvailable = await checkBackendAvailability();
-  
-  if (!isBackendAvailable) {
-    console.log('[AuthService] Backend unavailable, using mock authentication');
-    return performMockLogin(email, password);
-  }
-  
   try {
     console.log('[AuthService] Attempting backend API login for:', email);
     
@@ -480,19 +422,13 @@ export const login = async (email, password, rememberMe = false) => {
   } catch (error) {
     console.error('[AuthService] Backend API login failed:', error);
     
-    // Check if error indicates backend unavailability
+    // Mark backend as unavailable for network errors
     if (isNetworkOrBackendError(error)) {
-      console.warn('[AuthService] Network/backend error detected, falling back to mock authentication');
-      
-      // Mark backend as unavailable
       backendStatus.isAvailable = false;
       backendStatus.lastChecked = Date.now();
-      
-      // Fallback to mock authentication
-      return performMockLogin(email, password);
     }
     
-    // For non-network errors (like authentication failures), throw the original error
+    // For all errors, throw the error (no mock fallback)
     if (error instanceof ApiError) {
       throw error;
     }
@@ -824,47 +760,6 @@ export const updatePassword = async (email, newPassword, resetToken = null) => {
  * @returns {Promise<object>} User profile
  */
 export const getProfile = async () => {
-  const isApiEnabled = getConfig('enableApiIntegration', false);
-  
-  // If API integration is disabled, get user from token or mock data
-  if (!isApiEnabled) {
-    console.log('[AuthService] API integration disabled, using mock profile');
-    const userFromToken = getCurrentUser();
-    if (userFromToken) {
-      return {
-        success: true,
-        user: userFromToken,
-        mode: 'mock'
-      };
-    }
-    throw new ApiError(
-      'No user profile available',
-      ERROR_TYPES.AUTHENTICATION,
-      401
-    );
-  }
-  
-  // Check backend availability
-  const isBackendAvailable = await checkBackendAvailability();
-  
-  if (!isBackendAvailable) {
-    console.log('[AuthService] Backend unavailable, using mock profile');
-    const userFromToken = getCurrentUser();
-    if (userFromToken) {
-      return {
-        success: true,
-        user: userFromToken,
-        mode: 'mock',
-        offline: true
-      };
-    }
-    throw new ApiError(
-      'Profile unavailable - backend is down',
-      ERROR_TYPES.NETWORK,
-      503
-    );
-  }
-  
   try {
     console.log('[AuthService] Fetching profile from backend API');
     
@@ -883,43 +778,20 @@ export const getProfile = async () => {
   } catch (error) {
     console.error('[AuthService] Profile fetch failed:', error);
     
-    // Check if it's a network error (backend not available)
+    // Mark backend as unavailable for network errors
     if (isNetworkOrBackendError(error)) {
-      console.warn('[AuthService] Network error detected, falling back to token-based user');
-      
-      // Mark backend as unavailable
       backendStatus.isAvailable = false;
       backendStatus.lastChecked = Date.now();
-      
-      // For network errors, try to get user from token if available
-      const userFromToken = getCurrentUser();
-      if (userFromToken && !tokenManager.isTokenExpired()) {
-        console.log('[AuthService] Using token-based user for offline mode');
-        return {
-          success: true,
-          user: userFromToken,
-          mode: 'mock',
-          offline: true
-        };
-      }
-      
-      // If no valid token, return failed response but mark as network error
-      console.warn('[AuthService] No valid token available for offline mode');
-      return {
-        success: false,
-        error: 'Backend unavailable and no valid token for offline mode',
-        networkError: true,
-        offline: true
-      };
     }
     
-    // Only throw the error if it's not a network error that we handled above
+    // For all errors, throw the error (no fallback to mock/token)
     if (error instanceof ApiError) {
       throw error;
     }
+    
     throw new ApiError(
-      error.message || 'Failed to get profile',
-      ERROR_TYPES.SERVER,
+      error.message || 'Profile fetch failed',
+      ERROR_TYPES.AUTHENTICATION,
       error.status || 500,
       error
     );

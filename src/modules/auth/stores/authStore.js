@@ -17,7 +17,7 @@ const useAuthStore = create(
       error: null,
       rememberMe: false,
       backendStatus: null, // NEW: Track backend connectivity status
-      authMode: null, // NEW: Track authentication mode (api/mock)
+      authMode: null, // NEW: Track authentication mode (api)
       statusMessage: null, // NEW: User-friendly status messages
       
       
@@ -38,13 +38,7 @@ const useAuthStore = create(
           
           // Determine authentication mode and status message
           const authMode = response.mode || 'api';
-          let statusMessage = null;
-          
-          if (authMode === 'mock') {
-            statusMessage = 'Connected in demo mode - backend unavailable';
-          } else {
-            statusMessage = 'Connected to backend API';
-          }
+          const statusMessage = 'Connected to backend API';
           
           console.log('[AuthStore] Login successful -', authMode, 'mode');
           console.log('[AuthStore] Setting authentication state:', {
@@ -311,7 +305,7 @@ const useAuthStore = create(
           if (profileResponse.success && profileResponse.user) {
             console.log('[AuthStore] Profile verification successful');
             const authMode = profileResponse.mode || 'api';
-            const statusMessage = authMode === 'mock' ? 'Connected in demo mode' : 'Connected to backend API';
+            const statusMessage = 'Connected to backend API';
             
             set({
               user: profileResponse.user,
@@ -328,13 +322,13 @@ const useAuthStore = create(
         }
         
         // Fallback to token-based authentication
-        console.log('[AuthStore] Using token-based authentication (offline mode)');
+        console.log('[AuthStore] Using token-based authentication (API unavailable)');
         set({
           user: userFromToken,
           isAuthenticated: true,
           error: null,
-          authMode: 'mock',
-          statusMessage: 'Connected in offline mode',
+          authMode: 'api',
+          statusMessage: 'Using cached authentication',
           backendStatus: authService.getBackendStatus()
         });
         
@@ -390,7 +384,7 @@ const useAuthStore = create(
             ...state, 
             isInitializing: false,
             statusMessage: state.isAuthenticated 
-              ? (state.authMode === 'mock' ? 'Connected in demo mode' : 'Connected to backend API')
+              ? 'Connected to backend API'
               : 'Ready for authentication'
           }));
         }
