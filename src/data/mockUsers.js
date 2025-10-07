@@ -5,6 +5,45 @@
 
 export const mockUsers = [
   {
+    id: 'vevo-malik-1',
+    name: 'Vevo Malik',
+    email: 'vevomalik547@gmail.com',
+    role: 'admin',
+    team: null,
+    location: 'Global',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Vevo',
+    language: 'english',
+    joinedDate: '2022-01-01',
+    isActive: true,
+    expertise: ['system-admin', 'strategic-planning', 'business-development'],
+    industries: ['all'],
+    maxActiveLeads: 50,
+    currentActiveLeads: 8,
+    preferredDealSize: { min: 10000, max: 1000000 },
+    languageProficiency: { english: 'native' },
+    successRateBySource: { all: 0.95 },
+    commissionPercentage: 10.0,
+    targets: {
+      monthly: 500000,
+      quarterly: 1500000,
+      yearly: 6000000,
+      calls: 200,
+      emails: 300,
+      meetings: 100
+    },
+    actualPerformance: {
+      monthlyRevenue: 580000,
+      quarterlyRevenue: 1740000,
+      yearlyRevenue: 6960000,
+      callsMade: 230,
+      emailsSent: 340,
+      meetingsHeld: 120,
+      dealsWon: 25,
+      averageDealSize: 125000
+    },
+    company: 'SalesTracker CRM'
+  },
+  {
     id: 'user-1',
     name: 'Sara Ahmed',
     email: 'sara@salestracker.com',

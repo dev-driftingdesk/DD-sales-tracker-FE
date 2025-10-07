@@ -24,6 +24,7 @@ import { externalEmailMonitor } from './services/externalEmailMonitor';
 import { initializeEmailIntegrations } from './utils/emailIntegrationUtils';
 import Logo from './components/Logo';
 import AuthClearButton from './components/dev/AuthClearButton';
+import tokenManager from './services/auth/tokenManager.js';
 
 function App() {
   const [activeModule, setActiveModule] = useState('performance'); // Start with performance to show Module 2
@@ -260,8 +261,30 @@ function App() {
   };
 
   const handleAuthSuccess = (user) => {
-    // Authentication successful, the store will handle the state
-    console.log('[App] User authenticated:', user);
+    console.log('[App] ✅ User authenticated successfully:', user?.email);
+    console.log('[App] 🔄 Authentication flow should complete - forcing navigation...');
+    console.log('[App] Current auth state at success:', { isAuthenticated, user: user?.email, isInitializing });
+    
+    // NUCLEAR OPTION: Force immediate page reload to ensure navigation
+    // This bypasses all React state synchronization issues
+    setTimeout(() => {
+      const currentState = useAuthStore.getState();
+      const hasValidToken = !!tokenManager.getAccessToken();
+      
+      console.log('[App] 🔍 Final state check before navigation:', {
+        storeAuthenticated: currentState.isAuthenticated,
+        hasToken: hasValidToken,
+        user: currentState.user?.email
+      });
+      
+      if (hasValidToken) {
+        console.log('[App] 🚀 FORCING PAGE RELOAD to complete navigation...');
+        // Force full page reload - this will reinitialize the app with the stored token
+        window.location.reload();
+      } else {
+        console.error('[App] ❌ No valid token found after login - authentication may have failed');
+      }
+    }, 500);
   };
 
   const handleLogout = () => {

@@ -36,9 +36,17 @@ export const useAuth = () => {
           // Try to get fresh user data from API/token
           try {
             const response = await authService.getProfile();
-            setUser(response.user);
-            setIsAuthenticated(true);
+            if (response.success && response.user) {
+              setUser(response.user);
+              setIsAuthenticated(true);
+            } else {
+              // Profile fetch failed, clear tokens
+              tokenManager.clearTokens();
+              setUser(null);
+              setIsAuthenticated(false);
+            }
           } catch (profileError) {
+            console.warn('[useAuth] Profile fetch failed:', profileError);
             // Clear invalid tokens
             tokenManager.clearTokens();
             setUser(null);
@@ -229,20 +237,31 @@ export const useAuth = () => {
    * Handle automatic token refresh
    */
   const handleTokenRefresh = useCallback(async () => {
+    if (!isAuthenticated || !tokenManager.hasAccessToken()) {
+      return false;
+    }
+    
     if (tokenManager.shouldRefreshToken()) {
       try {
+        console.log('[useAuth] Refreshing token...');
         await authService.refreshToken();
+        
         // Update user data after token refresh
         const currentUser = authService.getCurrentUser();
         if (currentUser) {
           setUser(currentUser);
+          console.log('[useAuth] Token refresh successful, user updated');
+          return true;
         }
       } catch (error) {
+        console.error('[useAuth] Token refresh failed:', error);
         // Token refresh failed, logout user
         await logout();
+        return false;
       }
     }
-  }, [logout]);
+    return false;
+  }, [isAuthenticated, logout]);
 
   // Set up event listeners for cross-tab synchronization and token management
   useEffect(() => {
@@ -254,24 +273,39 @@ export const useAuth = () => {
     
     // Set up cross-tab event listeners
     const handleTokensUpdated = () => {
-      // Refresh authentication state when tokens are updated
+      console.log('[useAuth] Tokens updated, refreshing auth state');
       initializeAuth();
     };
     
     const handleTokensCleared = () => {
+      console.log('[useAuth] Tokens cleared, logging out');
       setUser(null);
       setIsAuthenticated(false);
       setError(null);
     };
     
     const handleLogoutOtherTab = () => {
+      console.log('[useAuth] Logout detected from other tab');
       setUser(null);
       setIsAuthenticated(false);
       setError(null);
     };
     
     const handleLoginOtherTab = () => {
+      console.log('[useAuth] Login detected from other tab');
       initializeAuth();
+    };
+    
+    const handleTokenExpired = () => {
+      console.log('[useAuth] Token expired, forcing logout');
+      setUser(null);
+      setIsAuthenticated(false);
+      setError('Your session has expired. Please log in again.');
+    };
+    
+    const handleTokenNeedsRefresh = () => {
+      console.log('[useAuth] Token needs refresh, attempting refresh');
+      handleTokenRefresh();
     };
     
     // Add event listeners
@@ -279,9 +313,8 @@ export const useAuth = () => {
     window.addEventListener('auth:tokens-cleared', handleTokensCleared);
     window.addEventListener('auth:logout-other-tab', handleLogoutOtherTab);
     window.addEventListener('auth:login-other-tab', handleLoginOtherTab);
-    
-    // Set up automatic token refresh check
-    const refreshInterval = setInterval(handleTokenRefresh, 60000); // Check every minute
+    window.addEventListener('auth:token-expired', handleTokenExpired);
+    window.addEventListener('auth:token-needs-refresh', handleTokenNeedsRefresh);
     
     // Cleanup
     return () => {
@@ -289,7 +322,11 @@ export const useAuth = () => {
       window.removeEventListener('auth:tokens-cleared', handleTokensCleared);
       window.removeEventListener('auth:logout-other-tab', handleLogoutOtherTab);
       window.removeEventListener('auth:login-other-tab', handleLoginOtherTab);
-      clearInterval(refreshInterval);
+      window.removeEventListener('auth:token-expired', handleTokenExpired);
+      window.removeEventListener('auth:token-needs-refresh', handleTokenNeedsRefresh);
+      
+      // Cleanup token manager
+      tokenManager.cleanupTokenManager();
     };
   }, [initializeAuth, handleTokenRefresh]);
 
@@ -309,13 +346,18 @@ export const useAuth = () => {
     refreshProfile,
     updateUser,
     clearError,
+    handleTokenRefresh,
     
     // Utility methods
     hasRole: (role) => user?.role === role,
     hasAnyRole: (roles) => roles.includes(user?.role),
     isAdmin: () => user?.role === 'admin',
     isManager: () => user?.role === 'manager' || user?.role === 'admin',
-    isSalesRep: () => user?.role === 'sales_rep'
+    isSalesRep: () => user?.role === 'sales_rep',
+    
+    // Token utilities
+    isTokenExpired: () => tokenManager.isTokenExpired(),
+    getTokenRemainingTime: () => tokenManager.getTokenRemainingTime()
   };
 };
 

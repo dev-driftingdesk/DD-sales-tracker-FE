@@ -14,6 +14,7 @@ const AuthContainer = ({ onAuthSuccess }) => {
   useEffect(() => {
     // Only trigger auth success after initialization is complete
     if (isAuthenticated && user && !isInitializing) {
+      console.log('[AuthContainer] Authentication state change detected, triggering onAuthSuccess');
       onAuthSuccess?.(user);
     }
   }, [isAuthenticated, user, isInitializing, onAuthSuccess]);
@@ -34,7 +35,30 @@ const AuthContainer = ({ onAuthSuccess }) => {
   };
 
   const handleLoginSuccess = (user) => {
+    console.log('[AuthContainer] handleLoginSuccess called with user:', user?.email);
+    console.log('[AuthContainer] Current auth state:', { isAuthenticated, user: user?.email, isInitializing });
+    
+    // Call the success handler immediately
     onAuthSuccess?.(user);
+    
+    // CRITICAL FIX: Force multiple callback attempts with state checks
+    const retryCallbacks = [100, 200, 400, 600];
+    retryCallbacks.forEach(delay => {
+      setTimeout(() => {
+        const currentState = useAuthStore.getState();
+        console.log(`[AuthContainer] Auth state check after ${delay}ms:`, { 
+          isAuthenticated: currentState.isAuthenticated, 
+          user: currentState.user?.email,
+          storeUser: user?.email
+        });
+        
+        // Force callback if state is authenticated but callback might have failed
+        if (currentState.isAuthenticated && currentState.user) {
+          console.log(`[AuthContainer] Forcing onAuthSuccess callback at ${delay}ms`);
+          onAuthSuccess?.(currentState.user);
+        }
+      }, delay);
+    });
   };
 
   const handleRegisterSuccess = (user) => {

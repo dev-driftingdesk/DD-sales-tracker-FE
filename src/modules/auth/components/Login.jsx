@@ -45,12 +45,40 @@ const Login = ({ onToggleView, onLoginSuccess }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!validateForm()) return;
+    console.log('[Login] 🚀 Form submitted with credentials:', {
+      email: formData.email,
+      password: '***' + formData.password.slice(-3),
+      passwordLength: formData.password.length
+    });
     
-    const result = await login(formData.email, formData.password, rememberMe);
+    if (!validateForm()) {
+      console.log('[Login] ❌ Form validation failed');
+      return;
+    }
     
-    if (result.success) {
-      onLoginSuccess?.(result.user);
+    console.log('[Login] ✅ Form validation passed, attempting login...');
+    
+    try {
+      const result = await login(formData.email, formData.password, rememberMe);
+      
+      console.log('[Login] 📊 Login result:', {
+        success: result.success,
+        user: result.user?.email,
+        error: result.error,
+        mode: result.mode
+      });
+      
+      if (result.success) {
+        console.log('[Login] ✅ Login successful, calling onLoginSuccess callback');
+        // Ensure the callback is called after a brief delay to let state settle
+        setTimeout(() => {
+          onLoginSuccess?.(result.user);
+        }, 100);
+      } else {
+        console.error('[Login] ❌ Login failed:', result.error);
+      }
+    } catch (error) {
+      console.error('[Login] 💥 Login exception:', error);
     }
   };
 

@@ -6,6 +6,8 @@ import { calculateLeadAging, calculateContactAttempts, calculateStageConversions
 import { calculateActivityPerRep, getActivityPerformanceCategory } from '../../../utils/dealActivityMetricsUtils';
 import { calculateLeadReengagementRate, calculateStaleLeads, calculateDropoffRateByStage } from '../../../utils/revenueEngagementMetricsUtils';
 import { LEAD_STATUSES, LEAD_SOURCES } from '../constants/index';
+// import { leadApi } from '../../../services/api/leadApiService.js';
+// import { getConfig } from '../../../services/api/config.js';
 
 // Initialize leads data immediately when store is created
 const initializeLeadsData = () => {
@@ -859,7 +861,7 @@ const initializeLeadsData = () => {
 };
 
 const useLeadStore = create((set, get) => ({
-  leads: initializeLeadsData(),
+  leads: [],
   filters: {
     status: 'all',
     source: 'all',
@@ -870,52 +872,592 @@ const useLeadStore = create((set, get) => ({
   isLoading: false,
   error: null,
 
-  // Actions
+  // Actions with API Integration
+  fetchLeads: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const mockLeads = initializeLeadsData();
+      set({ leads: mockLeads, isLoading: false });
+    } catch (error) {
+      console.error('Failed to fetch leads:', error);
+      set({ 
+        error: error.message || 'Failed to fetch leads',
+        isLoading: false 
+      });
+    }
+  },
+
+  fetchLead: async (id) => {
+    set({ isLoading: true, error: null });
+    try {
+      const isApiEnabled = false; // Temporarily disabled for testing
+      
+      if (!isApiEnabled) {
+        // Fallback to mock data
+        const { leads } = get();
+        const lead = leads.find(l => l.id === id);
+        if (lead) {
+          set({ selectedLead: lead, isLoading: false });
+          return lead;
+        }
+        throw new Error('Lead not found');
+      }
+
+      const response = await leadApi.getLead(id);
+      const lead = response.data || response;
+      set({ selectedLead: lead, isLoading: false });
+      return lead;
+    } catch (error) {
+      console.error('Failed to fetch lead:', error);
+      
+      // Fallback to finding in existing leads
+      const { leads } = get();
+      const lead = leads.find(l => l.id === id);
+      if (lead) {
+        set({ selectedLead: lead, isLoading: false });
+        return lead;
+      }
+      
+      set({ 
+        error: error.message || 'Failed to fetch lead',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+
+  addLead: async (leadData) => {
+    set({ isLoading: true, error: null });
+    try {
+      const isApiEnabled = false; // Temporarily disabled for testing
+      
+      if (!isApiEnabled) {
+        // Fallback to mock creation
+        const newLead = { 
+          ...leadData, 
+          id: leadData.id || Date.now().toString(),
+          createdAt: leadData.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          activities: leadData.activities || [],
+          dealValue: leadData.dealValue || 0,
+          closedValue: null,
+          closedDate: null
+        };
+        
+        set((state) => ({
+          leads: [...state.leads, newLead],
+          isLoading: false
+        }));
+        
+        return newLead;
+      }
+
+      const response = await leadApi.createLead(leadData);
+      const newLead = response.data || response;
+      
+      set((state) => ({
+        leads: [...state.leads, newLead],
+        isLoading: false
+      }));
+      
+      return newLead;
+    } catch (error) {
+      console.error('Failed to create lead:', error);
+      
+      // Fallback to mock creation on API failure
+      if (error.message?.includes('NetworkError') || error.message?.includes('fetch')) {
+        console.log('API unavailable, creating lead locally');
+        const newLead = { 
+          ...leadData, 
+          id: leadData.id || Date.now().toString(),
+          createdAt: leadData.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          activities: leadData.activities || [],
+          dealValue: leadData.dealValue || 0,
+          closedValue: null,
+          closedDate: null
+        };
+        
+        set((state) => ({
+          leads: [...state.leads, newLead],
+          isLoading: false
+        }));
+        
+        return newLead;
+      }
+      
+      set({ 
+        error: error.message || 'Failed to create lead',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+
+  updateLead: async (id, updates) => {
+    set({ isLoading: true, error: null });
+    try {
+      const isApiEnabled = false; // Temporarily disabled for testing
+      
+      if (!isApiEnabled) {
+        // Fallback to mock update
+        const updatedLead = {
+          ...updates,
+          id,
+          updatedAt: new Date().toISOString(),
+          // Auto-set closed value and date when status changes to won
+          ...(updates.status === 'won' ? {
+            closedValue: updates.closedValue || updates.dealValue || 0,
+            closedDate: new Date().toISOString()
+          } : {})
+        };
+        
+        set((state) => ({
+          leads: state.leads.map(lead => 
+            lead.id === id ? { ...lead, ...updatedLead } : lead
+          ),
+          selectedLead: state.selectedLead?.id === id ? { ...state.selectedLead, ...updatedLead } : state.selectedLead,
+          isLoading: false
+        }));
+        
+        return updatedLead;
+      }
+
+      const response = await leadApi.updateLead(id, updates);
+      const updatedLead = response.data || response;
+      
+      set((state) => ({
+        leads: state.leads.map(lead => 
+          lead.id === id ? updatedLead : lead
+        ),
+        selectedLead: state.selectedLead?.id === id ? updatedLead : state.selectedLead,
+        isLoading: false
+      }));
+      
+      return updatedLead;
+    } catch (error) {
+      console.error('Failed to update lead:', error);
+      
+      // Fallback to mock update on API failure
+      if (error.message?.includes('NetworkError') || error.message?.includes('fetch')) {
+        console.log('API unavailable, updating lead locally');
+        const updatedLead = {
+          ...updates,
+          id,
+          updatedAt: new Date().toISOString(),
+          // Auto-set closed value and date when status changes to won
+          ...(updates.status === 'won' ? {
+            closedValue: updates.closedValue || updates.dealValue || 0,
+            closedDate: new Date().toISOString()
+          } : {})
+        };
+        
+        set((state) => ({
+          leads: state.leads.map(lead => 
+            lead.id === id ? { ...lead, ...updatedLead } : lead
+          ),
+          selectedLead: state.selectedLead?.id === id ? { ...state.selectedLead, ...updatedLead } : state.selectedLead,
+          isLoading: false
+        }));
+        
+        return updatedLead;
+      }
+      
+      set({ 
+        error: error.message || 'Failed to update lead',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+
+  deleteLead: async (id) => {
+    set({ isLoading: true, error: null });
+    try {
+      const isApiEnabled = false; // Temporarily disabled for testing
+      
+      if (!isApiEnabled) {
+        // Fallback to mock deletion
+        set((state) => ({
+          leads: state.leads.filter(lead => lead.id !== id),
+          selectedLead: state.selectedLead?.id === id ? null : state.selectedLead,
+          isLoading: false
+        }));
+        return true;
+      }
+
+      await leadApi.deleteLead(id);
+      
+      set((state) => ({
+        leads: state.leads.filter(lead => lead.id !== id),
+        selectedLead: state.selectedLead?.id === id ? null : state.selectedLead,
+        isLoading: false
+      }));
+      
+      return true;
+    } catch (error) {
+      console.error('Failed to delete lead:', error);
+      
+      // Fallback to mock deletion on API failure
+      if (error.message?.includes('NetworkError') || error.message?.includes('fetch')) {
+        console.log('API unavailable, deleting lead locally');
+        set((state) => ({
+          leads: state.leads.filter(lead => lead.id !== id),
+          selectedLead: state.selectedLead?.id === id ? null : state.selectedLead,
+          isLoading: false
+        }));
+        return true;
+      }
+      
+      set({ 
+        error: error.message || 'Failed to delete lead',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+
+  assignLead: async (leadId, userId) => {
+    try {
+      const isApiEnabled = false; // Temporarily disabled for testing
+      
+      if (!isApiEnabled) {
+        // Fallback to mock assignment
+        const assignedUser = `user-${userId}`;
+        set((state) => ({
+          leads: state.leads.map(lead => 
+            lead.id === leadId ? { ...lead, assignedTo: assignedUser, updatedAt: new Date().toISOString() } : lead
+          ),
+          selectedLead: state.selectedLead?.id === leadId ? { ...state.selectedLead, assignedTo: assignedUser, updatedAt: new Date().toISOString() } : state.selectedLead
+        }));
+        return { assignedTo: assignedUser };
+      }
+
+      const response = await leadApi.assignLead(leadId, userId);
+      const updatedLead = response.data || response;
+      
+      set((state) => ({
+        leads: state.leads.map(lead => 
+          lead.id === leadId ? updatedLead : lead
+        ),
+        selectedLead: state.selectedLead?.id === leadId ? updatedLead : state.selectedLead
+      }));
+      
+      return updatedLead;
+    } catch (error) {
+      console.error('Failed to assign lead:', error);
+      
+      // Fallback to mock assignment on API failure
+      if (error.message?.includes('NetworkError') || error.message?.includes('fetch')) {
+        console.log('API unavailable, assigning lead locally');
+        const assignedUser = `user-${userId}`;
+        set((state) => ({
+          leads: state.leads.map(lead => 
+            lead.id === leadId ? { ...lead, assignedTo: assignedUser, updatedAt: new Date().toISOString() } : lead
+          ),
+          selectedLead: state.selectedLead?.id === leadId ? { ...state.selectedLead, assignedTo: assignedUser, updatedAt: new Date().toISOString() } : state.selectedLead
+        }));
+        return { assignedTo: assignedUser };
+      }
+      
+      throw error;
+    }
+  },
+
+  addActivity: async (leadId, activityData) => {
+    try {
+      const isApiEnabled = false; // Temporarily disabled for testing
+      
+      if (!isApiEnabled) {
+        // Fallback to mock activity creation
+        const enhancedActivity = {
+          ...activityData,
+          id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          createdAt: activityData.createdAt || new Date().toISOString(),
+          timestamp: activityData.timestamp || new Date().toISOString(),
+          isFromLead: activityData.isFromLead || false,
+          isResponse: activityData.isResponse || false,
+          metadata: {
+            ...activityData.metadata,
+            leadId,
+            source: activityData.metadata?.source || 'manual_entry'
+          }
+        };
+
+        set((state) => ({
+          leads: state.leads.map(lead => 
+            lead.id === leadId
+              ? { 
+                  ...lead, 
+                  activities: [...(lead.activities || []), enhancedActivity],
+                  updatedAt: new Date().toISOString()
+                }
+              : lead
+          ),
+          selectedLead: state.selectedLead?.id === leadId 
+            ? {
+                ...state.selectedLead,
+                activities: [...(state.selectedLead.activities || []), enhancedActivity],
+                updatedAt: new Date().toISOString()
+              }
+            : state.selectedLead
+        }));
+        
+        return enhancedActivity;
+      }
+
+      const response = await leadApi.createActivity(leadId, activityData);
+      const newActivity = response.data || response;
+      
+      // Update the lead with new activity
+      set((state) => ({
+        leads: state.leads.map(lead => 
+          lead.id === leadId 
+            ? { 
+                ...lead, 
+                activities: [...(lead.activities || []), newActivity],
+                updatedAt: new Date().toISOString()
+              }
+            : lead
+        ),
+        selectedLead: state.selectedLead?.id === leadId 
+          ? {
+              ...state.selectedLead,
+              activities: [...(state.selectedLead.activities || []), newActivity],
+              updatedAt: new Date().toISOString()
+            }
+          : state.selectedLead
+      }));
+      
+      return newActivity;
+    } catch (error) {
+      console.error('Failed to add activity:', error);
+      
+      // Fallback to mock activity creation on API failure
+      if (error.message?.includes('NetworkError') || error.message?.includes('fetch')) {
+        console.log('API unavailable, adding activity locally');
+        const enhancedActivity = {
+          ...activityData,
+          id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          createdAt: activityData.createdAt || new Date().toISOString(),
+          timestamp: activityData.timestamp || new Date().toISOString(),
+          isFromLead: activityData.isFromLead || false,
+          isResponse: activityData.isResponse || false,
+          metadata: {
+            ...activityData.metadata,
+            leadId,
+            source: activityData.metadata?.source || 'manual_entry'
+          }
+        };
+
+        set((state) => ({
+          leads: state.leads.map(lead => 
+            lead.id === leadId
+              ? { 
+                  ...lead, 
+                  activities: [...(lead.activities || []), enhancedActivity],
+                  updatedAt: new Date().toISOString()
+                }
+              : lead
+          ),
+          selectedLead: state.selectedLead?.id === leadId 
+            ? {
+                ...state.selectedLead,
+                activities: [...(state.selectedLead.activities || []), enhancedActivity],
+                updatedAt: new Date().toISOString()
+              }
+            : state.selectedLead
+        }));
+        
+        return enhancedActivity;
+      }
+      
+      throw error;
+    }
+  },
+
+  addNote: async (leadId, noteData) => {
+    try {
+      const isApiEnabled = false; // Temporarily disabled for testing
+      
+      // Handle both old format (string content) and new format (object with advanced properties)
+      let content, options;
+      if (typeof noteData === 'string') {
+        content = noteData;
+        options = {};
+      } else {
+        content = noteData.content;
+        options = {
+          category: noteData.category,
+          priority: noteData.priority,
+          tags: noteData.tags,
+          isPrivate: noteData.isPrivate,
+          user: noteData.author
+        };
+      }
+
+      if (!isApiEnabled) {
+        // Fallback to mock note creation
+        const noteActivity = {
+          id: `note-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          type: 'Note',
+          description: content,
+          user: options.user || 'Current User',
+          createdAt: new Date().toISOString(),
+          timestamp: new Date().toISOString(),
+          isFromLead: false,
+          isResponse: false,
+          metadata: {
+            source: 'note_add',
+            category: options.category || 'general',
+            priority: options.priority || 'normal',
+            tags: options.tags || [],
+            isPrivate: options.isPrivate || false
+          }
+        };
+        
+        set((state) => ({
+          leads: state.leads.map(lead => 
+            lead.id === leadId 
+              ? { 
+                  ...lead, 
+                  activities: [...(lead.activities || []), noteActivity],
+                  updatedAt: new Date().toISOString()
+                }
+              : lead
+          ),
+          selectedLead: state.selectedLead?.id === leadId 
+            ? {
+                ...state.selectedLead,
+                activities: [...(state.selectedLead.activities || []), noteActivity],
+                updatedAt: new Date().toISOString()
+              }
+            : state.selectedLead
+        }));
+        
+        return noteActivity;
+      }
+
+      const response = await leadApi.createNote(leadId, { content, ...options });
+      const newNote = response.data || response;
+      
+      // Update the lead with new note (stored as activity)
+      const noteActivity = {
+        id: newNote.id,
+        type: 'Note',
+        description: content,
+        user: options.user || 'Current User',
+        createdAt: new Date().toISOString(),
+        timestamp: new Date().toISOString(),
+        isFromLead: false,
+        isResponse: false,
+        metadata: {
+          source: 'note_add',
+          category: options.category || 'general',
+          priority: options.priority || 'normal',
+          isPrivate: options.isPrivate || false
+        }
+      };
+      
+      set((state) => ({
+        leads: state.leads.map(lead => 
+          lead.id === leadId 
+            ? { 
+                ...lead, 
+                activities: [...(lead.activities || []), noteActivity],
+                updatedAt: new Date().toISOString()
+              }
+            : lead
+        ),
+        selectedLead: state.selectedLead?.id === leadId 
+          ? {
+              ...state.selectedLead,
+              activities: [...(state.selectedLead.activities || []), noteActivity],
+              updatedAt: new Date().toISOString()
+            }
+          : state.selectedLead
+      }));
+      
+      return noteActivity;
+    } catch (error) {
+      console.error('Failed to add note:', error);
+      
+      // Fallback to mock note creation on API failure
+      if (error.message?.includes('NetworkError') || error.message?.includes('fetch')) {
+        console.log('API unavailable, adding note locally');
+        
+        // Handle both old format (string content) and new format (object with advanced properties)
+        let content, options;
+        if (typeof noteData === 'string') {
+          content = noteData;
+          options = {};
+        } else {
+          content = noteData.content;
+          options = {
+            category: noteData.category,
+            priority: noteData.priority,
+            tags: noteData.tags,
+            isPrivate: noteData.isPrivate,
+            user: noteData.author
+          };
+        }
+
+        const noteActivity = {
+          id: `note-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          type: 'Note',
+          description: content,
+          user: options.user || 'Current User',
+          createdAt: new Date().toISOString(),
+          timestamp: new Date().toISOString(),
+          isFromLead: false,
+          isResponse: false,
+          metadata: {
+            source: 'note_add',
+            category: options.category || 'general',
+            priority: options.priority || 'normal',
+            tags: options.tags || [],
+            isPrivate: options.isPrivate || false
+          }
+        };
+        
+        set((state) => ({
+          leads: state.leads.map(lead => 
+            lead.id === leadId 
+              ? { 
+                  ...lead, 
+                  activities: [...(lead.activities || []), noteActivity],
+                  updatedAt: new Date().toISOString()
+                }
+              : lead
+          ),
+          selectedLead: state.selectedLead?.id === leadId 
+            ? {
+                ...state.selectedLead,
+                activities: [...(state.selectedLead.activities || []), noteActivity],
+                updatedAt: new Date().toISOString()
+              }
+            : state.selectedLead
+        }));
+        
+        return noteActivity;
+      }
+      
+      throw error;
+    }
+  },
+
+  setFilters: (newFilters) => {
+    set((state) => ({
+      filters: { ...state.filters, ...newFilters }
+    }));
+    // Automatically fetch leads when filters change
+    get().fetchLeads();
+  },
+
+  // Keep existing utility methods for compatibility
   setLeads: (leads) => set({ leads }),
   
-  addLead: (lead) => {
-    const newLead = { 
-      ...lead, 
-      id: lead.id || Date.now().toString(),
-      createdAt: lead.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      activities: lead.activities || [],
-      dealValue: lead.dealValue || 0,
-      closedValue: null,
-      closedDate: null
-    };
-    set((state) => ({
-      leads: [...state.leads, newLead]
-    }));
-    return newLead;
-  },
-  
-  updateLead: (id, updates) => set((state) => ({
-    leads: state.leads.map(lead => 
-      lead.id === id 
-        ? { 
-            ...lead, 
-            ...updates, 
-            updatedAt: new Date().toISOString(),
-            // Auto-set closed value and date when status changes to won
-            ...(updates.status === 'won' && !lead.closedValue ? {
-              closedValue: updates.closedValue || lead.dealValue || 0,
-              closedDate: new Date().toISOString()
-            } : {})
-          } 
-        : lead
-    )
-  })),
-  
-  deleteLead: (id) => set((state) => ({
-    leads: state.leads.filter(lead => lead.id !== id)
-  })),
-  
   setSelectedLead: (lead) => set({ selectedLead: lead }),
-  
-  setFilters: (filters) => set((state) => ({
-    filters: { ...state.filters, ...filters }
-  })),
   
   addQuickActivity: (leadId, type, description) => {
     const state = get();
@@ -926,42 +1468,6 @@ const useLeadStore = create((set, get) => ({
       isFromLead: false,
       isResponse: false,
       metadata: { source: 'quick_add' }
-    };
-    return state.addActivity(leadId, activity);
-  },
-
-  addNote: (leadId, noteData) => {
-    const state = get();
-    
-    // Handle both old format (string content) and new format (object with advanced properties)
-    let content, options;
-    if (typeof noteData === 'string') {
-      content = noteData;
-      options = {};
-    } else {
-      content = noteData.content;
-      options = {
-        category: noteData.category,
-        priority: noteData.priority,
-        tags: noteData.tags,
-        isPrivate: noteData.isPrivate,
-        user: noteData.author
-      };
-    }
-
-    const activity = {
-      type: 'Note',
-      description: content,
-      user: options.user || 'Current User',
-      isFromLead: false,
-      isResponse: false,
-      metadata: { 
-        source: 'note_add',
-        priority: options.priority || 'normal',
-        category: options.category || 'general',
-        tags: options.tags || [],
-        isPrivate: options.isPrivate || false
-      }
     };
     return state.addActivity(leadId, activity);
   },

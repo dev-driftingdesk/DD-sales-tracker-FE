@@ -259,6 +259,16 @@ export const classifyAuthError = (error) => {
     };
   }
   
+  // Check if it's an ApiError with NOT_FOUND type (backend unavailable)
+  if (error.name === 'ApiError' && error.type === ERROR_TYPES.NOT_FOUND) {
+    return {
+      type: 'network',
+      shouldKeepSession: true,
+      message: `Backend unavailable: ${error.message}`,
+      userMessage: 'Server is temporarily unavailable. Your session is preserved.'
+    };
+  }
+  
   // Connection and timeout errors
   const networkIndicators = [
     'ECONNREFUSED',
@@ -342,6 +352,12 @@ const isNetworkOrBackendError = (error) => {
   // Network connectivity issues
   if (!navigator.onLine) {
     console.log('[AuthService] Offline mode detected');
+    return true;
+  }
+  
+  // Check if it's an ApiError with NOT_FOUND type (backend unavailable)
+  if (error.name === 'ApiError' && error.type === ERROR_TYPES.NOT_FOUND) {
+    console.log('[AuthService] Backend unavailability detected via ApiError NOT_FOUND');
     return true;
   }
   
@@ -897,6 +913,7 @@ export const getProfile = async () => {
       };
     }
     
+    // Only throw the error if it's not a network error that we handled above
     if (error instanceof ApiError) {
       throw error;
     }

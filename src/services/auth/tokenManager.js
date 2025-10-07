@@ -29,22 +29,72 @@ const getStorage = () => {
  * @param {number} expiresIn - Token expiration time in seconds
  */
 export const storeTokens = (accessToken, refreshToken, expiresIn) => {
+  // DEBUG: Log token details for debugging
+  console.log('[TokenManager] 🔍 Storing tokens:', {
+    accessToken: accessToken ? `${accessToken.slice(0, 20)}...` : 'null',
+    refreshToken: refreshToken ? `${refreshToken.slice(0, 20)}...` : 'null',
+    accessTokenLength: accessToken?.length,
+    refreshTokenLength: refreshToken?.length,
+    expiresIn
+  });
+  
+  // Validate input tokens
+  if (!accessToken || !isValidTokenFormat(accessToken)) {
+    console.error('[TokenManager] ❌ Access token validation failed:', {
+      token: accessToken ? `${accessToken.slice(0, 50)}...` : 'null',
+      length: accessToken?.length,
+      type: typeof accessToken
+    });
+    throw new Error('Invalid access token format');
+  }
+  
+  if (refreshToken && !isValidTokenFormat(refreshToken)) {
+    console.error('[TokenManager] ❌ Refresh token validation failed:', {
+      token: refreshToken ? `${refreshToken.slice(0, 50)}...` : 'null',
+      length: refreshToken?.length,
+      type: typeof refreshToken,
+      parts: refreshToken?.split?.('.').length
+    });
+    throw new Error('Invalid refresh token format');
+  }
+  
+  // Validate expiration time
+  if (!expiresIn || expiresIn <= 0) {
+    throw new Error('Invalid token expiration time');
+  }
+  
   const storage = getStorage();
   const timestamp = Date.now();
   const expiresAt = timestamp + (expiresIn * 1000);
   
-  storage.setItem(TOKEN_KEYS.ACCESS_TOKEN, accessToken);
-  storage.setItem(TOKEN_KEYS.TOKEN_TIMESTAMP, timestamp.toString());
-  storage.setItem(TOKEN_KEYS.TOKEN_EXPIRES_AT, expiresAt.toString());
-  
-  if (refreshToken) {
-    storage.setItem(TOKEN_KEYS.REFRESH_TOKEN, refreshToken);
+  try {
+    // Store tokens with error handling
+    storage.setItem(TOKEN_KEYS.ACCESS_TOKEN, accessToken);
+    storage.setItem(TOKEN_KEYS.TOKEN_TIMESTAMP, timestamp.toString());
+    storage.setItem(TOKEN_KEYS.TOKEN_EXPIRES_AT, expiresAt.toString());
+    
+    if (refreshToken) {
+      storage.setItem(TOKEN_KEYS.REFRESH_TOKEN, refreshToken);
+    }
+    
+    // Verify storage was successful
+    if (storage.getItem(TOKEN_KEYS.ACCESS_TOKEN) !== accessToken) {
+      throw new Error('Token storage failed - verification failed');
+    }
+    
+    console.log('[TokenManager] Tokens stored successfully');
+    
+    // Dispatch event for token update (don't include actual tokens for security)
+    window.dispatchEvent(new CustomEvent('auth:tokens-updated', {
+      detail: { timestamp, expiresAt }
+    }));
+    
+  } catch (error) {
+    console.error('[TokenManager] Token storage failed:', error);
+    // Clear any partially stored data
+    clearTokens();
+    throw new Error('Failed to store authentication tokens');
   }
-  
-  // Dispatch event for token update
-  window.dispatchEvent(new CustomEvent('auth:tokens-updated', {
-    detail: { accessToken, refreshToken, expiresAt }
-  }));
 };
 
 /**
@@ -66,16 +116,46 @@ export const getRefreshToken = () => {
 };
 
 /**
- * Remove all stored tokens
+ * Remove all stored tokens securely
  */
 export const clearTokens = () => {
   const storage = getStorage();
-  Object.values(TOKEN_KEYS).forEach(key => {
-    storage.removeItem(key);
-  });
   
-  // Dispatch event for token removal
-  window.dispatchEvent(new CustomEvent('auth:tokens-cleared'));
+  try {
+    // Clear each token key
+    Object.values(TOKEN_KEYS).forEach(key => {
+      storage.removeItem(key);
+    });
+    
+    // Verify tokens were cleared
+    const remainingTokens = Object.values(TOKEN_KEYS).filter(key => 
+      storage.getItem(key) !== null
+    );
+    
+    if (remainingTokens.length > 0) {
+      console.warn('[TokenManager] Some tokens could not be cleared:', remainingTokens);
+    } else {
+      console.log('[TokenManager] All tokens cleared successfully');
+    }
+    
+    // Dispatch event for token removal
+    window.dispatchEvent(new CustomEvent('auth:tokens-cleared'));
+    
+  } catch (error) {
+    console.error('[TokenManager] Error clearing tokens:', error);
+    
+    // Force clear using a more aggressive approach
+    try {
+      if (storage === localStorage) {
+        localStorage.clear();
+      } else {
+        sessionStorage.clear();
+      }
+      console.warn('[TokenManager] Used aggressive token clearing due to error');
+    } catch (fallbackError) {
+      console.error('[TokenManager] Fallback token clearing failed:', fallbackError);
+    }
+  }
 };
 
 /**
@@ -154,72 +234,172 @@ export const getTokenRemainingTime = () => {
 };
 
 /**
- * Parse JWT token payload (without verification)
+ * Parse JWT token payload securely (without verification)
  * @param {string} token - JWT token to parse
  * @returns {object|null} Parsed payload or null if invalid
  */
 export const parseTokenPayload = (token) => {
-  if (!token) return null;
+  if (!token || typeof token !== 'string') {
+    return null;
+  }
   
   try {
     const parts = token.split('.');
-    if (parts.length !== 3) return null;
+    if (parts.length !== 3) {
+      console.warn('[TokenManager] Invalid JWT format: expected 3 parts');
+      return null;
+    }
     
     const payload = parts[1];
-    const decodedPayload = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
-    return JSON.parse(decodedPayload);
+    
+    // Add padding if necessary for base64 decoding
+    let paddedPayload = payload.replace(/-/g, '+').replace(/_/g, '/');
+    while (paddedPayload.length % 4) {
+      paddedPayload += '=';
+    }
+    
+    const decodedPayload = atob(paddedPayload);
+    const parsedPayload = JSON.parse(decodedPayload);
+    
+    // Validate essential JWT claims
+    if (!parsedPayload.exp || !parsedPayload.iat) {
+      console.warn('[TokenManager] Missing essential JWT claims');
+      return null;
+    }
+    
+    // Check if token is obviously expired (extra safety)
+    if (parsedPayload.exp * 1000 < Date.now()) {
+      console.warn('[TokenManager] Token is expired according to payload');
+      return null;
+    }
+    
+    return parsedPayload;
+    
   } catch (error) {
-    console.warn('Failed to parse token payload:', error);
+    console.warn('[TokenManager] Failed to parse token payload:', error.message);
     return null;
   }
 };
 
 /**
- * Get user information from access token
+ * Get user information from access token securely
  * @returns {object|null} User information or null
  */
 export const getUserFromToken = () => {
   const token = getAccessToken();
-  if (!token) return null;
+  if (!token) {
+    return null;
+  }
+  
+  // Check if token is expired before parsing
+  if (isTokenExpired()) {
+    console.warn('[TokenManager] Attempting to get user from expired token');
+    return null;
+  }
   
   const payload = parseTokenPayload(token);
-  if (!payload) return null;
+  if (!payload) {
+    return null;
+  }
   
-  return {
-    id: payload.sub || payload.user_id || payload.id,
-    email: payload.email,
-    name: payload.name || payload.full_name,
-    role: payload.role || payload.roles?.[0],
-    permissions: payload.permissions || [],
+  // Validate required user fields
+  const userId = payload.sub || payload.user_id || payload.id;
+  const userEmail = payload.email;
+  
+  if (!userId || !userEmail) {
+    console.warn('[TokenManager] Token missing required user identification');
+    return null;
+  }
+  
+  // Sanitize and validate user data
+  const userData = {
+    id: String(userId),
+    email: String(userEmail),
+    name: payload.name || payload.full_name || 'Unknown User',
+    role: payload.role || payload.roles?.[0] || 'user',
+    permissions: Array.isArray(payload.permissions) ? payload.permissions : [],
     exp: payload.exp,
     iat: payload.iat
   };
+  
+  // Additional validation
+  if (!userData.email.includes('@')) {
+    console.warn('[TokenManager] Invalid email format in token');
+    return null;
+  }
+  
+  return userData;
 };
 
 /**
- * Validate token format (basic validation)
+ * Validate token format with comprehensive security checks
  * @param {string} token - Token to validate
  * @returns {boolean} True if token format is valid
  */
 export const isValidTokenFormat = (token) => {
-  if (!token || typeof token !== 'string') return false;
+  if (!token || typeof token !== 'string') {
+    return false;
+  }
+  
+  // Check for obviously malicious patterns
+  if (token.includes('<script') || token.includes('javascript:') || token.includes('data:')) {
+    console.warn('[TokenManager] Token contains potentially malicious content');
+    return false;
+  }
+  
+  // Check token length (reasonable bounds)
+  if (token.length < 20 || token.length > 4096) {
+    console.warn('[TokenManager] Token length outside reasonable bounds');
+    return false;
+  }
   
   const parts = token.split('.');
-  if (parts.length !== 3) return false;
+  
+  // Accept both JWT format (3 parts) and simple string tokens (1 part)
+  if (parts.length === 1) {
+    // Simple string token (like refresh tokens from some backends)
+    console.log('[TokenManager] ✅ Accepting simple string token format');
+    return true;
+  }
+  
+  if (parts.length !== 3) {
+    console.warn('[TokenManager] Invalid token format - expected 1 or 3 parts, got:', parts.length);
+    return false;
+  }
   
   try {
-    // Try to decode each part
-    parts.forEach(part => {
-      atob(part.replace(/-/g, '+').replace(/_/g, '/'));
-    });
+    // Try to decode each part and verify structure for JWT tokens
+    const header = JSON.parse(atob(parts[0].replace(/-/g, '+').replace(/_/g, '/')));
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+    
+    // Basic JWT structure validation
+    if (!header.alg || !header.typ) {
+      console.warn('[TokenManager] Invalid JWT header structure');
+      return false;
+    }
+    
+    if (!payload.exp || !payload.iat) {
+      console.warn('[TokenManager] Missing required JWT payload claims');
+      return false;
+    }
+    
+    // Check for reasonable expiration (not more than 1 year in the future)
+    const maxExp = Date.now() / 1000 + (365 * 24 * 60 * 60);
+    if (payload.exp > maxExp) {
+      console.warn('[TokenManager] Token expiration time unreasonably far in future');
+      return false;
+    }
+    
     return true;
+    
   } catch (error) {
+    console.warn('[TokenManager] Token format validation failed:', error.message);
     return false;
   }
 };
 
 /**
- * Set up automatic token cleanup on tab close/refresh
+ * Set up automatic token cleanup and refresh
  */
 export const setupTokenCleanup = () => {
   const storage = getStorage();
@@ -231,17 +411,28 @@ export const setupTokenCleanup = () => {
     });
   }
   
-  // Set up periodic cleanup for expired tokens
+  // Set up periodic cleanup and refresh check for expired tokens
   const cleanupInterval = setInterval(() => {
-    if (isTokenExpired() && !hasRefreshToken()) {
-      clearTokens();
+    if (hasAccessToken()) {
+      if (isTokenExpired()) {
+        console.log('[TokenManager] Token expired, clearing tokens');
+        clearTokens();
+        // Dispatch event to trigger logout
+        window.dispatchEvent(new CustomEvent('auth:token-expired'));
+      } else if (shouldRefreshToken()) {
+        console.log('[TokenManager] Token needs refresh');
+        // Dispatch event to trigger refresh
+        window.dispatchEvent(new CustomEvent('auth:token-needs-refresh'));
+      }
     }
-  }, 60000); // Check every minute
+  }, 30000); // Check every 30 seconds
   
   // Clean up interval on page unload
   window.addEventListener('beforeunload', () => {
     clearInterval(cleanupInterval);
   });
+  
+  return cleanupInterval;
 };
 
 /**
@@ -266,16 +457,40 @@ export const setupCrossTabSync = () => {
   });
 };
 
+// Global cleanup interval reference
+let globalCleanupInterval = null;
+
 /**
- * Initialize token manager
+ * Initialize token manager with enhanced cleanup
  */
 export const initializeTokenManager = () => {
-  setupTokenCleanup();
+  console.log('[TokenManager] Initializing token manager...');
+  
+  // Clean up any existing interval
+  if (globalCleanupInterval) {
+    clearInterval(globalCleanupInterval);
+  }
+  
+  // Setup cleanup and store reference
+  globalCleanupInterval = setupTokenCleanup();
   setupCrossTabSync();
   
   // Clean up expired tokens on initialization
-  if (isTokenExpired() && !hasRefreshToken()) {
+  if (hasAccessToken() && isTokenExpired()) {
+    console.log('[TokenManager] Found expired token on initialization, clearing');
     clearTokens();
+  }
+  
+  console.log('[TokenManager] Token manager initialized successfully');
+};
+
+/**
+ * Cleanup token manager (for testing/cleanup)
+ */
+export const cleanupTokenManager = () => {
+  if (globalCleanupInterval) {
+    clearInterval(globalCleanupInterval);
+    globalCleanupInterval = null;
   }
 };
 
@@ -292,5 +507,6 @@ export default {
   parseTokenPayload,
   getUserFromToken,
   isValidTokenFormat,
-  initializeTokenManager
+  initializeTokenManager,
+  cleanupTokenManager
 };

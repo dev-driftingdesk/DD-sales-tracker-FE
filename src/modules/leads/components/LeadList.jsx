@@ -7,7 +7,15 @@ import { LEAD_STATUS_LABELS, LEAD_STATUS_COLORS, LEAD_SOURCE_LABELS } from '../c
 import { calculatePrimaryCommission, formatCommission } from '../../../utils/commissionUtils';
 
 const LeadList = ({ onSelectLead }) => {
-  const { leads, filters, setFilters, getFilteredLeads } = useLeadStore();
+  const { 
+    leads, 
+    filters, 
+    setFilters, 
+    getFilteredLeads, 
+    isLoading, 
+    error,
+    fetchLeads 
+  } = useLeadStore();
   const { products } = useCRMStore();
   const { users } = useUserStore();
   const filteredLeads = getFilteredLeads();
@@ -58,7 +66,17 @@ const LeadList = ({ onSelectLead }) => {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="px-6 py-4 border-b border-gray-200">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Leads</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold text-gray-900">Leads</h2>
+          {error && (
+            <button
+              onClick={() => fetchLeads()}
+              className="text-sm text-red-600 hover:text-red-700"
+            >
+              Retry
+            </button>
+          )}
+        </div>
         
         {/* Search and Filters */}
         <div className="space-y-3">
@@ -101,7 +119,17 @@ const LeadList = ({ onSelectLead }) => {
 
       {/* Lead List */}
       <div className="flex-1 overflow-y-auto">
-        {filteredLeads.length === 0 ? (
+        {isLoading ? (
+          <div className="p-6 text-center">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-teal-600 mx-auto mb-2"></div>
+            <p className="text-gray-500 text-sm">Loading leads...</p>
+          </div>
+        ) : error ? (
+          <div className="p-6 text-center">
+            <p className="text-red-500 text-sm mb-2">Failed to load leads</p>
+            <p className="text-gray-500 text-xs">{error}</p>
+          </div>
+        ) : filteredLeads.length === 0 ? (
           <div className="p-6 text-center">
             <p className="text-gray-500 text-sm">No leads found</p>
           </div>
@@ -182,6 +210,7 @@ const LeadList = ({ onSelectLead }) => {
       <div className="px-6 py-3 border-t border-gray-200 bg-gray-50">
         <p className="text-xs text-gray-600">
           Showing {filteredLeads.length} leads
+          {isLoading && ' (loading...)'}
         </p>
       </div>
     </div>

@@ -47,6 +47,12 @@ const useAuthStore = create(
           }
           
           console.log('[AuthStore] Login successful -', authMode, 'mode');
+          console.log('[AuthStore] Setting authentication state:', {
+            user: response.user?.email,
+            isAuthenticated: true,
+            authMode,
+            statusMessage
+          });
           
           set({
             user: response.user,
@@ -58,6 +64,8 @@ const useAuthStore = create(
             statusMessage,
             backendStatus: authService.getBackendStatus()
           });
+          
+          console.log('[AuthStore] Authentication state set successfully');
           
           return { success: true, user: response.user, mode: authMode };
         } catch (error) {
@@ -105,29 +113,50 @@ const useAuthStore = create(
       },
 
       logout: async () => {
+        console.log('[AuthStore] Starting logout process...');
+        
         try {
-          // Try backend API logout
-          await authService.logout();
-          
+          // Immediately clear state to prevent any race conditions
           set({
             user: null,
             isAuthenticated: false,
             error: null,
             authMode: null,
-            statusMessage: 'Logged out',
+            statusMessage: 'Logging out...',
+            backendStatus: null,
+            isLoading: false,
+            isInitializing: false
+          });
+          
+          // Try backend API logout (don't wait for it)
+          authService.logout().catch(error => {
+            console.warn('[AuthStore] Backend logout failed (ignored):', error);
+          });
+          
+          // Dispatch logout event for cross-tab synchronization
+          window.dispatchEvent(new CustomEvent('auth:logout-other-tab'));
+          
+          // Final state update
+          set({
+            statusMessage: 'Logged out successfully',
             backendStatus: authService.getBackendStatus()
           });
-        } catch (error) {
-          // Always clear local state even if API logout fails
-          console.warn('[AuthStore] Logout error:', error);
           
+          console.log('[AuthStore] Logout completed successfully');
+          
+        } catch (error) {
+          console.error('[AuthStore] Logout error:', error);
+          
+          // Ensure state is cleared even on error
           set({
             user: null,
             isAuthenticated: false,
             error: null,
             authMode: null,
             statusMessage: 'Logged out',
-            backendStatus: authService.getBackendStatus()
+            backendStatus: authService.getBackendStatus(),
+            isLoading: false,
+            isInitializing: false
           });
         }
       },
@@ -196,53 +225,82 @@ const useAuthStore = create(
           user: state.user ? { ...state.user, ...updates } : null
         }));
       },
+      
+      // Force logout without API call (for emergency logout)
+      forceLogout: () => {
+        console.log('[AuthStore] Force logout initiated');
+        
+        // Clear tokens immediately
+        tokenManager.clearTokens();
+        
+        // Clear all auth state
+        set({
+          user: null,
+          isAuthenticated: false,
+          error: null,
+          authMode: null,
+          statusMessage: 'Session ended',
+          backendStatus: null,
+          isLoading: false,
+          isInitializing: false
+        });
+        
+        // Dispatch event for cross-tab sync
+        window.dispatchEvent(new CustomEvent('auth:logout-other-tab'));
+        
+        console.log('[AuthStore] Force logout completed');
+      },
 
-      // Check authentication status with enhanced backend detection and race condition protection
+      // Check authentication status with simplified, reliable logic
       checkAuthStatus: async () => {
         console.log('[AuthStore] Starting auth status check...');
         
+        // Check if we have a valid token locally
+        if (!authService.isAuthenticated()) {
+          console.log('[AuthStore] No valid token found locally');
+          set({
+            user: null,
+            isAuthenticated: false,
+            error: null,
+            authMode: null,
+            statusMessage: 'Not authenticated',
+            backendStatus: authService.getBackendStatus()
+          });
+          return false;
+        }
+        
+        // Get user from token immediately for consistent state
+        const userFromToken = authService.getCurrentUser();
+        if (!userFromToken || !userFromToken.id) {
+          console.log('[AuthStore] Invalid token data');
+          tokenManager.clearTokens();
+          set({
+            user: null,
+            isAuthenticated: false,
+            error: null,
+            authMode: null,
+            statusMessage: 'Invalid authentication',
+            backendStatus: authService.getBackendStatus()
+          });
+          return false;
+        }
+        
+        console.log('[AuthStore] Valid token found, setting authenticated state');
+        
         try {
-          // First check if we have a valid token locally
-          if (!authService.isAuthenticated()) {
-            console.log('[AuthStore] No valid token found locally');
-            // Clear any persisted invalid state atomically
-            set({
-              user: null,
-              isAuthenticated: false,
-              error: null,
-              authMode: null,
-              statusMessage: 'Not authenticated',
-              backendStatus: authService.getBackendStatus()
-            });
-            return false;
-          }
-          
-          console.log('[AuthStore] Valid token found locally, verifying profile...');
-          
-          // Use enhanced getProfile which handles backend detection with timeout protection
-          const profilePromise = authService.getProfile();
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Profile fetch timeout')), 8000)
-          );
-          
-          const profileResponse = await Promise.race([profilePromise, timeoutPromise]);
+          // Try to get fresh profile from API with short timeout
+          const profileResponse = await Promise.race([
+            authService.getProfile(),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Profile fetch timeout')), 3000)
+            )
+          ]);
           
           if (profileResponse.success && profileResponse.user) {
-            console.log('[AuthStore] Profile verification successful:', profileResponse.user);
-            
-            // Determine authentication mode and status message
+            console.log('[AuthStore] Profile verification successful');
             const authMode = profileResponse.mode || 'api';
-            let statusMessage = null;
+            const statusMessage = authMode === 'mock' ? 'Connected in demo mode' : 'Connected to backend API';
             
-            if (profileResponse.offline) {
-              statusMessage = 'Connected in offline mode - backend unavailable';
-            } else if (authMode === 'mock') {
-              statusMessage = 'Connected in demo mode';
-            } else {
-              statusMessage = 'Connected to backend API';
-            }
-            
-            // Set state atomically to prevent race conditions
             set({
               user: profileResponse.user,
               isAuthenticated: true,
@@ -251,197 +309,71 @@ const useAuthStore = create(
               statusMessage,
               backendStatus: authService.getBackendStatus()
             });
-            
             return true;
-          } else if (profileResponse.networkError) {
-            // Handle network error response - backend unavailable but preserve session if token exists
-            console.log('[AuthStore] Network error detected, checking token validity...');
-            
-            if (authService.isAuthenticated()) {
-              const userFromToken = authService.getCurrentUser();
-              if (userFromToken) {
-                console.log('[AuthStore] Preserving session with token-based user data due to network error');
-                set({
-                  user: userFromToken,
-                  isAuthenticated: true,
-                  error: null,
-                  authMode: 'mock',
-                  statusMessage: 'Connected in offline mode - backend unavailable',
-                  backendStatus: authService.getBackendStatus()
-                });
-                return true;
-              }
-            }
-            
-            // If no valid token, clear state
-            console.log('[AuthStore] No valid token for offline mode');
-            tokenManager.clearTokens();
-            set({
-              user: null,
-              isAuthenticated: false,
-              error: null,
-              authMode: null,
-              statusMessage: 'Authentication required',
-              backendStatus: authService.getBackendStatus()
-            });
-            return false;
-          } else {
-            console.log('[AuthStore] Profile verification failed - no user data');
-            // Clear tokens and state
-            tokenManager.clearTokens();
-            set({
-              user: null,
-              isAuthenticated: false,
-              error: null,
-              authMode: null,
-              statusMessage: 'Authentication expired',
-              backendStatus: authService.getBackendStatus()
-            });
-            return false;
           }
         } catch (error) {
-          console.error('[AuthStore] Authentication check failed:', error);
-          
-          // Use enhanced error classification for smart handling
-          const errorClassification = classifyAuthError(error);
-          console.log('[AuthStore] Error classification:', errorClassification);
-          
-          // Handle timeout errors specially
-          if (error.message === 'Profile fetch timeout') {
-            console.warn('[AuthStore] Profile fetch timed out, checking token validity...');
-            
-            // If we still have a valid token locally, keep user authenticated but mark as offline
-            if (authService.isAuthenticated()) {
-              const userFromToken = authService.getCurrentUser();
-              if (userFromToken) {
-                console.log('[AuthStore] Using token-based user data due to timeout');
-                set({
-                  user: userFromToken,
-                  isAuthenticated: true,
-                  error: null,
-                  authMode: 'mock',
-                  statusMessage: 'Connected in offline mode - backend timeout',
-                  backendStatus: authService.getBackendStatus()
-                });
-                return true;
-              }
-            }
-          }
-          
-          // Smart error handling based on classification
-          if (errorClassification.shouldKeepSession) {
-            console.log('[AuthStore] Network/backend error detected - preserving session');
-            
-            // Keep session for network errors, try to get user from token
-            if (authService.isAuthenticated()) {
-              const userFromToken = authService.getCurrentUser();
-              if (userFromToken) {
-                console.log('[AuthStore] Preserving session with token-based user data');
-                set({
-                  user: userFromToken,
-                  isAuthenticated: true,
-                  error: null,
-                  authMode: 'mock',
-                  statusMessage: errorClassification.userMessage,
-                  backendStatus: authService.getBackendStatus()
-                });
-                return true;
-              }
-            }
-            
-            // If no valid token, show error but don't clear everything
-            set({
-              error: errorClassification.userMessage,
-              statusMessage: errorClassification.userMessage,
-              backendStatus: authService.getBackendStatus()
-            });
-            return false;
-          } else {
-            // Authentication error - clear tokens and state
-            console.log('[AuthStore] Authentication error detected - clearing session');
-            tokenManager.clearTokens();
-            set({
-              user: null,
-              isAuthenticated: false,
-              error: errorClassification.userMessage,
-              authMode: null,
-              statusMessage: 'Authentication failed',
-              backendStatus: authService.getBackendStatus()
-            });
-            return false;
-          }
+          console.log('[AuthStore] API not available, using token-based auth');
         }
+        
+        // Fallback to token-based authentication
+        console.log('[AuthStore] Using token-based authentication (offline mode)');
+        set({
+          user: userFromToken,
+          isAuthenticated: true,
+          error: null,
+          authMode: 'mock',
+          statusMessage: 'Connected in offline mode',
+          backendStatus: authService.getBackendStatus()
+        });
+        
+        return true;
       },
 
       // Removed checkMockAuthStatus - no longer needed with single store architecture
 
-      // Initialize authentication state on app startup with enhanced race condition protection
+      // Initialize authentication state on app startup with race condition protection
       initializeAuth: async () => {
         console.log('[AuthStore] Starting authentication initialization...');
         
-        // Get current state to check if initialization is already in progress
+        // Prevent multiple simultaneous initializations
         const currentState = get();
         if (currentState.isInitializing) {
-          console.log('[AuthStore] Initialization already in progress, skipping...');
+          console.log('[AuthStore] Initialization already in progress');
           return;
         }
         
-        // Set initializing state atomically
+        // Set initializing state
         set({ 
           isInitializing: true,
           statusMessage: 'Initializing authentication...',
-          error: null // Clear any previous errors
+          error: null
         });
         
         try {
-          console.log('[AuthStore] Performing authentication status check...');
+          // Perform auth check with timeout
+          const isValid = await Promise.race([
+            get().checkAuthStatus(),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Initialization timeout')), 5000)
+            )
+          ]);
           
-          // Check authentication status using enhanced method with timeout protection
-          const authCheckPromise = get().checkAuthStatus();
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Authentication check timeout')), 10000)
-          );
-          
-          const isValid = await Promise.race([authCheckPromise, timeoutPromise]);
-          console.log('[AuthStore] Auth status check completed:', isValid);
-          
-          // If authentication is valid, ensure user data is available immediately
-          if (isValid) {
-            const currentState = get();
-            if (!currentState.user) {
-              console.warn('[AuthStore] Authentication valid but no user data, attempting to fetch...');
-              try {
-                const profileResponse = await authService.getProfile();
-                if (profileResponse.success && profileResponse.user) {
-                  set({ user: profileResponse.user });
-                  console.log('[AuthStore] User data retrieved successfully');
-                }
-              } catch (profileError) {
-                console.warn('[AuthStore] Failed to fetch user profile:', profileError);
-              }
-            }
-          }
-          
-          // Add small delay to prevent flashing but ensure user data is available
-          await new Promise(resolve => setTimeout(resolve, 50));
+          console.log('[AuthStore] Auth initialization completed:', isValid);
           
         } catch (error) {
-          console.error('[AuthStore] Authentication initialization failed:', error);
+          console.error('[AuthStore] Auth initialization failed:', error);
           
-          // Set error state but don't crash the application
+          // Set safe fallback state
           set({
             user: null,
             isAuthenticated: false,
-            error: error.message === 'Authentication check timeout' 
-              ? 'Authentication check timed out - please try again' 
-              : 'Authentication initialization failed',
+            error: 'Authentication initialization failed',
             authMode: null,
             statusMessage: 'Initialization failed',
             backendStatus: authService.getBackendStatus()
           });
         } finally {
-          // Ensure initializing is always set to false atomically
-          console.log('[AuthStore] Completing authentication initialization');
+          // Always complete initialization
           set(state => ({ 
             ...state, 
             isInitializing: false,
@@ -466,6 +398,64 @@ const useAuthStore = create(
       // Clear status message
       clearStatusMessage: () => {
         set({ statusMessage: null });
+      },
+      
+      // Reset all auth state (for debugging/testing)
+      resetAuthState: () => {
+        console.log('[AuthStore] Resetting all authentication state');
+        
+        tokenManager.clearTokens();
+        authService.resetBackendStatus();
+        
+        set({
+          user: null,
+          isAuthenticated: false,
+          isLoading: false,
+          isInitializing: false,
+          error: null,
+          rememberMe: false,
+          backendStatus: null,
+          authMode: null,
+          statusMessage: null
+        });
+        
+        console.log('[AuthStore] Auth state reset completed');
+      },
+      
+      // Handle token refresh automatically
+      handleTokenRefresh: async () => {
+        const currentState = get();
+        if (!currentState.isAuthenticated) {
+          console.log('[AuthStore] Not authenticated, skipping token refresh');
+          return false;
+        }
+        
+        try {
+          console.log('[AuthStore] Attempting token refresh...');
+          const response = await authService.refreshToken();
+          
+          if (response.success) {
+            console.log('[AuthStore] Token refresh successful');
+            // Update user data from refreshed token
+            const userFromToken = authService.getCurrentUser();
+            if (userFromToken) {
+              set(state => ({ 
+                ...state, 
+                user: userFromToken,
+                statusMessage: 'Session refreshed'
+              }));
+            }
+            return true;
+          } else {
+            console.warn('[AuthStore] Token refresh failed');
+            get().forceLogout();
+            return false;
+          }
+        } catch (error) {
+          console.error('[AuthStore] Token refresh error:', error);
+          get().forceLogout();
+          return false;
+        }
       }
     }),
     {
@@ -478,7 +468,7 @@ const useAuthStore = create(
         // Note: Don't persist isInitializing, backendStatus, statusMessage - they should be refreshed
       }),
       onRehydrateStorage: () => (state) => {
-        // Validate rehydrated state with enhanced consistency checks
+        // Validate rehydrated state with strict consistency checks
         if (state) {
           console.log('[AuthStore] Rehydrating persisted state:', {
             hasUser: !!state.user,
@@ -486,36 +476,48 @@ const useAuthStore = create(
             authMode: state.authMode
           });
           
-          // Validate authentication state consistency
-          if (state.isAuthenticated && !state.user) {
-            console.warn('[AuthStore] Invalid persisted state: authenticated but no user - clearing');
-            state.isAuthenticated = false;
-            state.user = null;
-            state.authMode = null;
-          }
-          
-          // Validate token consistency if API mode
-          if (state.isAuthenticated && state.authMode === 'api') {
-            if (!authService.isAuthenticated()) {
-              console.warn('[AuthStore] Token expired or invalid - clearing persisted state');
-              state.isAuthenticated = false;
-              state.user = null;
-              state.authMode = null;
-            }
-          }
-          
-          // Ensure initialization state is reset on rehydration
+          // Reset transient state first
           state.isInitializing = false;
           state.isLoading = false;
           state.error = null;
           state.statusMessage = null;
+          state.backendStatus = null;
           
-          // Validate user data completeness for immediate availability
-          if (state.isAuthenticated && state.user && !state.user.id) {
-            console.warn('[AuthStore] Incomplete user data in persisted state - clearing');
-            state.isAuthenticated = false;
-            state.user = null;
-            state.authMode = null;
+          // Validate authentication state consistency
+          if (state.isAuthenticated) {
+            // Must have valid user data
+            if (!state.user || !state.user.id || !state.user.email) {
+              console.warn('[AuthStore] Invalid persisted state: missing user data');
+              state.isAuthenticated = false;
+              state.user = null;
+              state.authMode = null;
+              tokenManager.clearTokens();
+              return;
+            }
+            
+            // Check token validity for API mode
+            if (state.authMode === 'api') {
+              if (!authService.isAuthenticated()) {
+                console.warn('[AuthStore] Token expired - clearing persisted state');
+                state.isAuthenticated = false;
+                state.user = null;
+                state.authMode = null;
+                return;
+              }
+              
+              // Verify token user matches persisted user
+              const tokenUser = authService.getCurrentUser();
+              if (!tokenUser || tokenUser.id !== state.user.id) {
+                console.warn('[AuthStore] Token user mismatch - clearing persisted state');
+                state.isAuthenticated = false;
+                state.user = null;
+                state.authMode = null;
+                tokenManager.clearTokens();
+                return;
+              }
+            }
+            
+            console.log('[AuthStore] Persisted authentication state validated successfully');
           }
         }
       }

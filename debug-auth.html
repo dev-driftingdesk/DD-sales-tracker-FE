@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authentication Debug</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            padding: 20px; 
+            max-width: 800px; 
+            margin: 0 auto; 
+        }
+        .test-section {
+            background: #f5f5f5;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        pre {
+            background: #222;
+            color: #00ff00;
+            padding: 10px;
+            overflow-x: auto;
+            border-radius: 4px;
+        }
+        .error { color: red; }
+        .success { color: green; }
+        .warning { color: orange; }
+    </style>
+</head>
+<body>
+    <h1>SalesTracker Authentication Debug</h1>
+    
+    <div class="test-section">
+        <h2>Quick Test Login</h2>
+        <p>Test the login flow with demo credentials:</p>
+        <button onclick="testLogin()">Test Login with Demo User</button>
+        <button onclick="checkAuthStatus()">Check Current Auth Status</button>
+        <button onclick="clearAuth()">Clear Authentication</button>
+        <pre id="output"></pre>
+    </div>
+
+    <div class="test-section">
+        <h2>Manual Login Test</h2>
+        <input type="email" id="email" placeholder="Email" value="demo@salestracker.com">
+        <input type="password" id="password" placeholder="Password" value="demo">
+        <button onclick="manualLogin()">Manual Login</button>
+    </div>
+
+    <div class="test-section">
+        <h2>Token Storage Analysis</h2>
+        <button onclick="analyzeTokens()">Analyze Stored Tokens</button>
+        <button onclick="testNavigation()">Test Post-Login Navigation</button>
+    </div>
+
+    <script>
+        const output = document.getElementById('output');
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : type === 'warning' ? 'warning' : '';
+            output.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
+            console.log(`[${timestamp}] ${message}`);
+        }
+
+        function clearOutput() {
+            output.innerHTML = '';
+        }
+
+        async function testLogin() {
+            clearOutput();
+            log('=== Testing Login Flow ===');
+            
+            try {
+                // Test with demo credentials
+                const response = await fetch('http://localhost:5174/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email: 'demo@salestracker.com',
+                        password: 'demo'
+                    })
+                });
+                
+                log(`Login response status: ${response.status}`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log('Login successful!', 'success');
+                    log(`User: ${data.user?.name} (${data.user?.email})`);
+                    log(`Mode: ${data.mode || 'api'}`);
+                    
+                    // Check if tokens were stored
+                    analyzeTokens();
+                } else {
+                    log(`Login failed with status: ${response.status}`, 'error');
+                    const errorData = await response.text();
+                    log(`Error: ${errorData}`, 'error');
+                }
+                
+            } catch (error) {
+                log(`Login error: ${error.message}`, 'error');
+                log('This might indicate backend is down, testing mock login...', 'warning');
+                
+                // Test mock authentication directly
+                testMockAuth();
+            }
+        }
+
+        function testMockAuth() {
+            log('=== Testing Mock Authentication ===');
+            
+            // Simulate what the frontend should do for mock auth
+            const mockUser = {
+                id: 'demo-1',
+                name: 'Demo User',
+                email: 'demo@salestracker.com',
+                role: 'sales_rep',
+                company: 'SalesTracker CRM'
+            };
+            
+            // Create mock token
+            const mockToken = `mock_token_${mockUser.id}_${Date.now()}`;
+            const mockRefreshToken = `mock_refresh_${mockUser.id}_${Date.now()}`;
+            
+            // Store tokens in localStorage (simulating tokenManager)
+            localStorage.setItem('auth_token', mockToken);
+            localStorage.setItem('refresh_token', mockRefreshToken);
+            localStorage.setItem('auth_token_timestamp', Date.now().toString());
+            localStorage.setItem('auth_token_expires_at', (Date.now() + 3600000).toString()); // 1 hour
+            
+            log('Mock authentication completed', 'success');
+            log(`Mock user: ${mockUser.name} (${mockUser.email})`);
+            
+            analyzeTokens();
+        }
+
+        function checkAuthStatus() {
+            clearOutput();
+            log('=== Checking Authentication Status ===');
+            
+            const hasToken = !!localStorage.getItem('auth_token');
+            const tokenTimestamp = localStorage.getItem('auth_token_timestamp');
+            const tokenExpiresAt = localStorage.getItem('auth_token_expires_at');
+            
+            log(`Has Token: ${hasToken}`);
+            
+            if (hasToken) {
+                log(`Token Created: ${new Date(parseInt(tokenTimestamp)).toLocaleString()}`);
+                log(`Token Expires: ${new Date(parseInt(tokenExpiresAt)).toLocaleString()}`);
+                
+                const isExpired = Date.now() >= parseInt(tokenExpiresAt);
+                log(`Is Expired: ${isExpired}`, isExpired ? 'error' : 'success');
+                
+                if (!isExpired) {
+                    log('✅ Authentication should be valid', 'success');
+                } else {
+                    log('❌ Token is expired', 'error');
+                }
+            } else {
+                log('❌ No authentication token found', 'error');
+            }
+        }
+
+        function clearAuth() {
+            clearOutput();
+            log('=== Clearing Authentication ===');
+            
+            // Clear all auth-related localStorage items
+            const authKeys = ['auth_token', 'refresh_token', 'auth_token_timestamp', 'auth_token_expires_at'];
+            authKeys.forEach(key => {
+                localStorage.removeItem(key);
+                sessionStorage.removeItem(key);
+            });
+            
+            // Clear Zustand auth store if it exists
+            localStorage.removeItem('auth-storage');
+            
+            log('Authentication cleared', 'success');
+        }
+
+        async function manualLogin() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            clearOutput();
+            log(`=== Manual Login Test: ${email} ===`);
+            
+            try {
+                // Simulate the exact login flow the app uses
+                log('Step 1: Attempting backend API login...');
+                
+                const response = await fetch('http://localhost:5174/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password, rememberMe: false })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log('✅ Backend login successful', 'success');
+                    log(`User: ${data.user?.name}`);
+                } else {
+                    log('⚠️ Backend unavailable, should fall back to mock', 'warning');
+                    testMockAuth();
+                }
+                
+            } catch (error) {
+                log(`Network error: ${error.message}`, 'error');
+                log('Should trigger mock authentication fallback', 'warning');
+                testMockAuth();
+            }
+        }
+
+        function analyzeTokens() {
+            log('=== Token Storage Analysis ===');
+            
+            const authKeys = ['auth_token', 'refresh_token', 'auth_token_timestamp', 'auth_token_expires_at'];
+            
+            authKeys.forEach(key => {
+                const value = localStorage.getItem(key);
+                if (value) {
+                    if (key.includes('timestamp') || key.includes('expires')) {
+                        log(`${key}: ${new Date(parseInt(value)).toLocaleString()}`);
+                    } else if (key.includes('token')) {
+                        log(`${key}: ${value.substring(0, 20)}... (${value.length} chars)`);
+                    } else {
+                        log(`${key}: ${value}`);
+                    }
+                } else {
+                    log(`${key}: NOT SET`, 'warning');
+                }
+            });
+            
+            // Check Zustand store
+            const authStorage = localStorage.getItem('auth-storage');
+            if (authStorage) {
+                try {
+                    const parsed = JSON.parse(authStorage);
+                    log('Zustand Auth Store:', 'success');
+                    log(`  isAuthenticated: ${parsed.state?.isAuthenticated}`);
+                    log(`  user: ${parsed.state?.user?.name || 'Not set'}`);
+                    log(`  authMode: ${parsed.state?.authMode || 'Not set'}`);
+                } catch (e) {
+                    log('Zustand store parse error', 'error');
+                }
+            } else {
+                log('Zustand auth store: NOT SET', 'warning');
+            }
+        }
+
+        function testNavigation() {
+            log('=== Testing Post-Login Navigation ===');
+            
+            const hasToken = !!localStorage.getItem('auth_token');
+            const authStorage = localStorage.getItem('auth-storage');
+            
+            if (!hasToken) {
+                log('❌ No token found - navigation should stay on login', 'error');
+                return;
+            }
+            
+            if (!authStorage) {
+                log('❌ No Zustand auth state - this might prevent navigation', 'error');
+                return;
+            }
+            
+            try {
+                const parsed = JSON.parse(authStorage);
+                const isAuthenticated = parsed.state?.isAuthenticated;
+                const user = parsed.state?.user;
+                
+                if (isAuthenticated && user) {
+                    log('✅ Should navigate to dashboard', 'success');
+                    log('Opening main application...', 'success');
+                    window.open('http://localhost:5174', '_blank');
+                } else {
+                    log('❌ Zustand state incomplete - navigation blocked', 'error');
+                    log(`  isAuthenticated: ${isAuthenticated}`);
+                    log(`  user: ${!!user}`);
+                }
+                
+            } catch (e) {
+                log('❌ Zustand store parse error', 'error');
+            }
+        }
+
+        // Initialize
+        log('Authentication Debug Tool Ready');
+        log('Click buttons above to test authentication flow');
+    </script>
+</body>
+</html>
