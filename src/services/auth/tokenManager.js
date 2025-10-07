@@ -4,6 +4,7 @@
  */
 
 import { getConfig } from '../api/config.js';
+import { getUserByEmail } from '../../data/mockUsers.js';
 
 // Token storage keys
 const TOKEN_KEYS = {
@@ -282,7 +283,7 @@ export const parseTokenPayload = (token) => {
 };
 
 /**
- * Get user information from access token securely
+ * Get user information from access token securely with fallback to mock data
  * @returns {object|null} User information or null
  */
 export const getUserFromToken = () => {
@@ -311,18 +312,16 @@ export const getUserFromToken = () => {
     hasUserId: !!payload.user_id,
     hasEmail: !!payload.email,
     hasUserEmail: !!payload.user_email,
-    hasNameId: !!payload.nameid
+    hasNameId: !!payload.nameid,
+    hasName: !!payload.name,
+    hasFullName: !!payload.full_name,
+    hasGivenName: !!payload.given_name,
+    hasUniqueName: !!payload.unique_name
   });
   
   // Validate required user fields - try multiple field patterns
   const userId = payload.sub || payload.user_id || payload.id || payload.nameid || payload.unique_name;
   const userEmail = payload.email || payload.user_email || payload.emailaddress;
-  
-  console.log('[TokenManager] 🔍 User identification extraction:', {
-    userId,
-    userEmail,
-    extractionSuccessful: !!(userId && userEmail)
-  });
   
   if (!userId || !userEmail) {
     console.warn('[TokenManager] ❌ Token missing required user identification');
@@ -330,11 +329,47 @@ export const getUserFromToken = () => {
     return null;
   }
   
+  // Try to get name from JWT payload first
+  let userName = payload.name || payload.full_name || payload.given_name || payload.unique_name;
+  
+  // If no name in JWT, try to get it from mock users data
+  if (!userName || userName === userId) {
+    console.log('[TokenManager] 🔍 Name not found in JWT or equals user ID, checking mock users...');
+    
+    try {
+      const mockUser = getUserByEmail(userEmail);
+      
+      if (mockUser && mockUser.name) {
+        userName = mockUser.name;
+        console.log('[TokenManager] ✅ Found name in mock data:', userName);
+      } else {
+        console.log('[TokenManager] ⚠️ User not found in mock data, using fallback');
+      }
+    } catch (error) {
+      console.warn('[TokenManager] Error loading mock users:', error);
+    }
+  }
+  
+  // Final fallback: construct name from email or use "User"
+  if (!userName || userName === userId) {
+    const emailName = userEmail.split('@')[0];
+    userName = emailName.charAt(0).toUpperCase() + emailName.slice(1).replace(/[._]/g, ' ');
+    console.log('[TokenManager] 📧 Using constructed name from email:', userName);
+  }
+  
+  console.log('[TokenManager] 🔍 Final user identification extraction:', {
+    userId,
+    userEmail,
+    userName,
+    extractionSuccessful: !!(userId && userEmail),
+    nameSource: payload.name ? 'JWT' : 'Mock/Fallback'
+  });
+  
   // Sanitize and validate user data
   const userData = {
     id: String(userId),
     email: String(userEmail),
-    name: payload.name || payload.full_name || 'Unknown User',
+    name: String(userName),
     role: payload.role || payload.roles?.[0] || 'user',
     permissions: Array.isArray(payload.permissions) ? payload.permissions : [],
     exp: payload.exp,
