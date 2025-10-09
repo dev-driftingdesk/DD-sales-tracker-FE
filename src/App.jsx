@@ -73,6 +73,37 @@ function App() {
     };
     
     initializeApp();
+    
+    // Monitor token changes in storage to debug logout issue
+    const originalSetItem = Storage.prototype.setItem;
+    const originalRemoveItem = Storage.prototype.removeItem;
+    const originalClear = Storage.prototype.clear;
+    
+    Storage.prototype.setItem = function(key, value) {
+      if (key === 'auth_token') {
+        console.log('🔑 TOKEN SET:', { key, value: value ? '[PRESENT]' : '[EMPTY]', stack: new Error().stack });
+      }
+      originalSetItem.call(this, key, value);
+    };
+    
+    Storage.prototype.removeItem = function(key) {
+      if (key === 'auth_token') {
+        console.log('🗑️ TOKEN REMOVED:', { key, stack: new Error().stack });
+      }
+      originalRemoveItem.call(this, key);
+    };
+    
+    Storage.prototype.clear = function() {
+      console.log('🧹 STORAGE CLEARED:', { stack: new Error().stack });
+      originalClear.call(this);
+    };
+    
+    return () => {
+      // Restore original methods
+      Storage.prototype.setItem = originalSetItem;
+      Storage.prototype.removeItem = originalRemoveItem;  
+      Storage.prototype.clear = originalClear;
+    };
   }, [initializeAuth, initializeSession, initializeNotifications]);
 
   // Initialize email integrations and external monitoring
@@ -95,6 +126,11 @@ function App() {
   useEffect(() => {
     const handleAuthLogout = async (event) => {
       // API client detected authentication failure
+      console.log('🚨 [App] AUTH LOGOUT EVENT RECEIVED - Someone triggered auth:logout event!', {
+        eventDetail: event.detail,
+        tokenPresent: !!(localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token')),
+        timestamp: new Date().toISOString()
+      });
       console.log('[App] Authentication failure detected, checking auth status...');
       await checkAuthStatus();
     };
@@ -109,15 +145,26 @@ function App() {
       checkAuthStatus();
     };
 
+    const handleTokenExpired = async (event) => {
+      console.log('🚨 [App] TOKEN EXPIRED EVENT RECEIVED - TokenManager detected expired token!', {
+        timestamp: new Date().toISOString(),
+        source: 'tokenManager periodic cleanup'
+      });
+      console.log('[App] Token expired, checking auth status...');
+      await checkAuthStatus();
+    };
+
     // Listen for auth events from API client
     window.addEventListener('auth:logout', handleAuthLogout);
     window.addEventListener('auth:tokens-updated', handleTokensUpdated);
     window.addEventListener('auth:tokens-cleared', handleTokensCleared);
+    window.addEventListener('auth:token-expired', handleTokenExpired);
 
     return () => {
       window.removeEventListener('auth:logout', handleAuthLogout);
       window.removeEventListener('auth:tokens-updated', handleTokensUpdated);
       window.removeEventListener('auth:tokens-cleared', handleTokensCleared);
+      window.removeEventListener('auth:token-expired', handleTokenExpired);
     };
   }, [checkAuthStatus]);
 
@@ -537,7 +584,7 @@ function App() {
       )}
 
         {/* Development Authentication Clear Tools */}
-        <AuthClearButton />
+        {/* <AuthClearButton /> */}
       </div>
     </AuthErrorBoundary>
   );

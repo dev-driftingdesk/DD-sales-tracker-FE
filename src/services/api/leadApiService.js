@@ -9,7 +9,7 @@ const leadApiService = createApiService('api/v2/leads');
 
 export const leadApi = {
   // Core Lead Operations
-  getLeads: (filters = {}) => {
+  getLeads: async (filters = {}) => {
     // Map frontend filter names to backend API parameter names
     const cleanParams = {};
     
@@ -30,13 +30,22 @@ export const leadApi = {
     console.log('Backend API params being sent:', cleanParams);
     
     try {
-      return await leadApiService.get(`?${params}`);
+      const response = await leadApiService.get(`?${params}`);
+      console.log('✅ Lead API Success:', {
+        status: 'success',
+        dataCount: response.data?.length || response.length || 'unknown',
+        hasData: !!response.data || !!response.length,
+        responseStructure: Object.keys(response || {})
+      });
+      return response;
     } catch (error) {
-      console.error('Lead API Error Details:', {
+      console.error('❌ Lead API Error Details:', {
         status: error.status,
+        statusCode: error.response?.status,
         message: error.message,
         response: error.response?.data,
         validationErrors: error.response?.data?.errors,
+        headers: error.response?.headers,
         originalError: error
       });
       throw error;

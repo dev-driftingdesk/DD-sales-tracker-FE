@@ -6,8 +6,37 @@ import { calculateLeadAging, calculateContactAttempts, calculateStageConversions
 import { calculateActivityPerRep, getActivityPerformanceCategory } from '../../../utils/dealActivityMetricsUtils';
 import { calculateLeadReengagementRate, calculateStaleLeads, calculateDropoffRateByStage } from '../../../utils/revenueEngagementMetricsUtils';
 import { LEAD_STATUSES, LEAD_SOURCES } from '../constants/index';
-// import { leadApi } from '../../../services/api/leadApiService.js';
+import { leadApi } from '../../../services/api/leadApiService.js';
+import useAuthStore from '../../auth/stores/authStore.js';
 // import { getConfig } from '../../../services/api/config.js';
+
+// Backend to Frontend mapping functions
+const mapNumericToSource = (numericSource) => {
+  const sourceMapping = {
+    1: LEAD_SOURCES.WEBSITE,
+    2: LEAD_SOURCES.REFERRAL,
+    3: LEAD_SOURCES.EMAIL,
+    4: LEAD_SOURCES.FACEBOOK,
+    5: LEAD_SOURCES.INSTAGRAM,
+    6: LEAD_SOURCES.LINKEDIN,
+    7: LEAD_SOURCES.WHATSAPP,
+    8: LEAD_SOURCES.EVENT,
+    9: LEAD_SOURCES.COLD_CALL,
+    10: LEAD_SOURCES.MANUAL
+  };
+  return sourceMapping[numericSource] || LEAD_SOURCES.MANUAL;
+};
+
+const mapNumericToStatus = (numericStatus) => {
+  const statusMapping = {
+    1: LEAD_STATUSES.NEW,
+    2: LEAD_STATUSES.CONTACTED,
+    3: LEAD_STATUSES.IN_PROGRESS,
+    4: LEAD_STATUSES.WON,
+    5: LEAD_STATUSES.LOST
+  };
+  return statusMapping[numericStatus] || LEAD_STATUSES.NEW;
+};
 
 // Initialize leads data immediately when store is created
 const initializeLeadsData = () => {
@@ -876,12 +905,97 @@ const useLeadStore = create((set, get) => ({
   fetchLeads: async () => {
     set({ isLoading: true, error: null });
     try {
-      const mockLeads = initializeLeadsData();
-      set({ leads: mockLeads, isLoading: false });
+      // Get current authentication status
+      const authState = useAuthStore.getState();
+      const currentUser = authState.user;
+      const isAuthenticated = authState.isAuthenticated;
+      
+      console.log('[LeadStore] Authentication status:', {
+        isAuthenticated,
+        user: currentUser?.email,
+        userId: currentUser?.id
+      });
+      
+      const { filters } = get();
+      
+      // Map frontend filters to backend API parameters
+      const apiFilters = {
+        page: 1,
+        pageSize: 100, // Get all leads for now
+        status: filters.status !== 'all' ? filters.status : undefined,
+        source: filters.source !== 'all' ? filters.source : undefined,
+        searchTerm: filters.searchTerm || undefined,
+        assignedTo: filters.assignedTo !== 'all' ? filters.assignedTo : undefined
+      };
+      
+      console.log('[LeadStore] Fetching leads with filters:', apiFilters);
+      console.log('[LeadStore] Current user context:', currentUser);
+      
+      const response = await leadApi.getLeads(apiFilters);
+      
+      console.log('[LeadStore] Backend API response:', response);
+      console.log('[LeadStore] Response type:', typeof response);
+      console.log('[LeadStore] Response is array:', Array.isArray(response));
+      console.log('[LeadStore] Response.data is array:', Array.isArray(response.data));
+      console.log('[LeadStore] Response keys:', Object.keys(response || {}));
+      
+      // Handle different response structures from backend
+      // Backend might return leads directly as array or in response.data
+      let leadsArray = [];
+      if (Array.isArray(response)) {
+        leadsArray = response;
+        console.log('[LeadStore] Using response as direct array:', leadsArray.length, 'leads');
+      } else if (Array.isArray(response.data)) {
+        leadsArray = response.data;
+        console.log('[LeadStore] Using response.data array:', leadsArray.length, 'leads');
+      } else if (response.data && Array.isArray(response.data.items)) {
+        leadsArray = response.data.items;
+        console.log('[LeadStore] Using response.data.items array:', leadsArray.length, 'leads');
+      } else {
+        console.warn('[LeadStore] Unexpected response structure, using fallback');
+        leadsArray = [];
+      }
+      
+      console.log('[LeadStore] Final leads array length:', leadsArray.length);
+      
+      // Transform backend response to frontend format
+      const transformedLeads = leadsArray.map(lead => ({
+        id: lead.id?.toString(),
+        companyName: lead.company || '',
+        contactName: `${lead.firstName || ''} ${lead.lastName || ''}`.trim(),
+        firstName: lead.firstName || '',
+        lastName: lead.lastName || '',
+        email: lead.email || '',
+        phone: lead.phone || '',
+        location: lead.location || '',
+        source: mapNumericToSource(lead.source),
+        status: mapNumericToStatus(lead.status),
+        jobTitle: lead.jobTitle || '',
+        assignedTo: lead.assignedUserId || null,
+        score: lead.score || 0,
+        dealValue: lead.estimatedValue || 0,
+        notes: lead.notes || '',
+        tags: lead.tags || [],
+        createdAt: lead.createdAt,
+        updatedAt: lead.updatedAt,
+        activities: lead.activities || [],
+        lastActivity: lead.lastActivity || ''
+      }));
+      
+      console.log('[LeadStore] Transformed leads count:', transformedLeads.length);
+      console.log('[LeadStore] First lead sample:', transformedLeads[0]);
+      
+      set({ leads: transformedLeads, isLoading: false });
+      
     } catch (error) {
-      console.error('Failed to fetch leads:', error);
+      console.error('[LeadStore] Failed to fetch leads:', error);
+      
+      // Fallback to mock data on error (for development)
+      console.log('[LeadStore] Using fallback mock data due to API error');
+      const mockLeads = initializeLeadsData();
       set({ 
-        error: error.message || 'Failed to fetch leads',
+        leads: mockLeads,
+        error: `API Error: ${error.message}. Using mock data.`,
         isLoading: false 
       });
     }
@@ -890,23 +1004,39 @@ const useLeadStore = create((set, get) => ({
   fetchLead: async (id) => {
     set({ isLoading: true, error: null });
     try {
-      const isApiEnabled = false; // Temporarily disabled for testing
+      console.log('[LeadStore] Fetching single lead with ID:', id);
       
-      if (!isApiEnabled) {
-        // Fallback to mock data
-        const { leads } = get();
-        const lead = leads.find(l => l.id === id);
-        if (lead) {
-          set({ selectedLead: lead, isLoading: false });
-          return lead;
-        }
-        throw new Error('Lead not found');
-      }
-
       const response = await leadApi.getLead(id);
-      const lead = response.data || response;
-      set({ selectedLead: lead, isLoading: false });
-      return lead;
+      
+      console.log('[LeadStore] Single lead API response:', response);
+      
+      // Transform backend response to frontend format
+      const backendLead = response.data || response;
+      const transformedLead = {
+        id: backendLead.id?.toString(),
+        companyName: backendLead.company || '',
+        contactName: `${backendLead.firstName || ''} ${backendLead.lastName || ''}`.trim(),
+        firstName: backendLead.firstName || '',
+        lastName: backendLead.lastName || '',
+        email: backendLead.email || '',
+        phone: backendLead.phone || '',
+        location: backendLead.location || '',
+        source: mapNumericToSource(backendLead.source),
+        status: mapNumericToStatus(backendLead.status),
+        jobTitle: backendLead.jobTitle || '',
+        assignedTo: backendLead.assignedUserId || null,
+        score: backendLead.score || 0,
+        dealValue: backendLead.estimatedValue || 0,
+        notes: backendLead.notes || '',
+        tags: backendLead.tags || [],
+        createdAt: backendLead.createdAt,
+        updatedAt: backendLead.updatedAt,
+        activities: backendLead.activities || [],
+        lastActivity: backendLead.lastActivity || ''
+      };
+      
+      set({ selectedLead: transformedLead, isLoading: false });
+      return transformedLead;
     } catch (error) {
       console.error('Failed to fetch lead:', error);
       

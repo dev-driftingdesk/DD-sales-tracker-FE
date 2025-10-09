@@ -5,6 +5,7 @@ import { LEAD_SOURCES, LEAD_SOURCE_LABELS, LEAD_STATUSES } from '../constants/in
 import useRoutingStore from '../../routing/stores/routingStore';
 import useCRMStore from '../../crm-core/stores/crmStore';
 import useUserStore from '../../../stores/userStore.jsx';
+import { leadApi } from '../../../services/api/leadApiService.js';
 
 const LeadCaptureForm = ({ onClose }) => {
   const { addLead } = useLeadStore();
@@ -13,23 +14,30 @@ const LeadCaptureForm = ({ onClose }) => {
   
   
   const [formData, setFormData] = useState({
-    companyName: '',
-    contactName: '',
+    firstName: '',
+    lastName: '',
     email: '',
     phone: '',
-    location: '',
+    company: '',
+    jobTitle: '',
     source: LEAD_SOURCES.MANUAL,
+    status: LEAD_STATUSES.NEW,
+    assignedUserId: '',
+    score: 0,
+    // Additional fields for form completeness
+    location: '',
     productInterest: '',
-    productId: '', // Single product association
-    additionalProductId: '', // Additional product association
+    productId: '',
+    additionalProductId: '',
     language: 'english',
     dealValue: '',
     notes: '',
     tags: [],
-    teamMembers: [] // Array of team member objects {userId, role}
+    teamMembers: []
   });
   const [tagInput, setTagInput] = useState('');
   const [errors, setErrors] = useState({});
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -94,31 +102,87 @@ const LeadCaptureForm = ({ onClose }) => {
 
   const validate = () => {
     const newErrors = {};
-    if (!formData.companyName.trim()) newErrors.companyName = 'Company name is required';
-    if (!formData.contactName.trim()) newErrors.contactName = 'Contact name is required';
+    if (!formData.firstName.trim()) newErrors.firstName = 'First name is required';
+    if (!formData.lastName.trim()) newErrors.lastName = 'Last name is required';
     if (!formData.email.trim()) {
       newErrors.email = 'Email is required';
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = 'Email is invalid';
     }
     if (!formData.phone.trim()) newErrors.phone = 'Phone number is required';
+    if (!formData.company.trim()) newErrors.company = 'Company name is required';
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  // Map frontend source values to backend numeric values
+  const mapSourceToNumeric = (source) => {
+    const sourceMapping = {
+      [LEAD_SOURCES.WEBSITE]: 1,
+      [LEAD_SOURCES.REFERRAL]: 2,
+      [LEAD_SOURCES.EMAIL]: 3,
+      [LEAD_SOURCES.FACEBOOK]: 4,
+      [LEAD_SOURCES.INSTAGRAM]: 5,
+      [LEAD_SOURCES.LINKEDIN]: 6,
+      [LEAD_SOURCES.WHATSAPP]: 7,
+      [LEAD_SOURCES.EVENT]: 8,
+      [LEAD_SOURCES.COLD_CALL]: 9,
+      [LEAD_SOURCES.MANUAL]: 10
+    };
+    return sourceMapping[source] || 10; // Default to manual
+  };
+  
+  // Map frontend status values to backend numeric values  
+  const mapStatusToNumeric = (status) => {
+    const statusMapping = {
+      [LEAD_STATUSES.NEW]: 1,
+      [LEAD_STATUSES.CONTACTED]: 2,
+      [LEAD_STATUSES.IN_PROGRESS]: 3,
+      [LEAD_STATUSES.WON]: 4,
+      [LEAD_STATUSES.LOST]: 5
+    };
+    return statusMapping[status] || 1; // Default to new
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (validate()) {
+    if (!validate()) return;
+    
+    setIsLoading(true);
+    
+    try {
+      // Transform data for backend API
+      const apiData = {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        phone: formData.phone,
+        company: formData.company,
+        jobTitle: formData.jobTitle || '',
+        source: mapSourceToNumeric(formData.source),
+        status: mapStatusToNumeric(formData.status),
+        assignedUserId: formData.assignedUserId || null,
+        score: parseInt(formData.score) || 0
+      };
+      
+      console.log('Sending lead data to backend:', apiData);
+      
+      // Call backend API
+      const response = await leadApi.createLead(apiData);
+      
+      console.log('Lead created successfully:', response);
+      
+      // Create local lead object for store (with additional frontend fields)
       const newLead = {
         ...formData,
-        id: Date.now().toString(),
+        id: response.id || Date.now().toString(),
         dealValue: formData.dealValue ? parseFloat(formData.dealValue) : 0,
-        status: LEAD_STATUSES.NEW,
-        assignedTo: null,
+        status: formData.status,
+        assignedTo: formData.assignedUserId,
         activities: [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        createdAt: response.createdAt || new Date().toISOString(),
+        updatedAt: response.updatedAt || new Date().toISOString()
       };
       
       // Add lead to store
@@ -131,6 +195,33 @@ const LeadCaptureForm = ({ onClose }) => {
       }, 100);
       
       onClose();
+      
+    } catch (error) {
+      console.error('Failed to create lead:', error);
+      
+      // Handle specific validation errors
+      if (error.response?.data?.errors) {
+        const backendErrors = {};
+        Object.keys(error.response.data.errors).forEach(key => {
+          // Map backend field names to frontend field names
+          const fieldMapping = {
+            'FirstName': 'firstName',
+            'LastName': 'lastName', 
+            'Email': 'email',
+            'Phone': 'phone',
+            'Company': 'company',
+            'JobTitle': 'jobTitle'
+          };
+          const frontendField = fieldMapping[key] || key.toLowerCase();
+          backendErrors[frontendField] = error.response.data.errors[key][0];
+        });
+        setErrors(backendErrors);
+      } else {
+        // Generic error handling
+        alert('Failed to create lead. Please try again.');
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -219,47 +310,47 @@ const LeadCaptureForm = ({ onClose }) => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Company Name *
+                    First Name *
                   </label>
                   <input
                     type="text"
-                    name="companyName"
-                    value={formData.companyName}
+                    name="firstName"
+                    value={formData.firstName}
                     onChange={handleChange}
                     className={`
                       w-full px-4 py-3 border rounded-lg text-sm outline-none transition-all duration-200
-                      ${errors.companyName 
+                      ${errors.firstName 
                         ? 'border-red-500 focus:ring-2 focus:ring-red-500' 
                         : 'border-gray-300 focus:ring-2 focus:ring-teal-600 focus:border-teal-600'
                       }
                     `}
-                    placeholder="Enter company name"
+                    placeholder="Enter first name"
                   />
-                  {errors.companyName && (
-                    <p className="mt-1 text-xs text-red-500">{errors.companyName}</p>
+                  {errors.firstName && (
+                    <p className="mt-1 text-xs text-red-500">{errors.firstName}</p>
                   )}
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Contact Name *
+                    Last Name *
                   </label>
                   <input
                     type="text"
-                    name="contactName"
-                    value={formData.contactName}
+                    name="lastName"
+                    value={formData.lastName}
                     onChange={handleChange}
                     className={`
                       w-full px-4 py-3 border rounded-lg text-sm outline-none transition-all duration-200
-                      ${errors.contactName 
+                      ${errors.lastName 
                         ? 'border-red-500 focus:ring-2 focus:ring-red-500' 
                         : 'border-gray-300 focus:ring-2 focus:ring-teal-600 focus:border-teal-600'
                       }
                     `}
-                    placeholder="Enter contact name"
+                    placeholder="Enter last name"
                   />
-                  {errors.contactName && (
-                    <p className="mt-1 text-xs text-red-500">{errors.contactName}</p>
+                  {errors.lastName && (
+                    <p className="mt-1 text-xs text-red-500">{errors.lastName}</p>
                   )}
                 </div>
 
@@ -311,6 +402,43 @@ const LeadCaptureForm = ({ onClose }) => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Company Name *
+                  </label>
+                  <input
+                    type="text"
+                    name="company"
+                    value={formData.company}
+                    onChange={handleChange}
+                    className={`
+                      w-full px-4 py-3 border rounded-lg text-sm outline-none transition-all duration-200
+                      ${errors.company 
+                        ? 'border-red-500 focus:ring-2 focus:ring-red-500' 
+                        : 'border-gray-300 focus:ring-2 focus:ring-teal-600 focus:border-teal-600'
+                      }
+                    `}
+                    placeholder="Enter company name"
+                  />
+                  {errors.company && (
+                    <p className="mt-1 text-xs text-red-500">{errors.company}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Job Title
+                  </label>
+                  <input
+                    type="text"
+                    name="jobTitle"
+                    value={formData.jobTitle}
+                    onChange={handleChange}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-600 focus:border-teal-600 outline-none transition-all duration-200"
+                    placeholder="Enter job title"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Location
                   </label>
                   <input
@@ -321,6 +449,43 @@ const LeadCaptureForm = ({ onClose }) => {
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-600 focus:border-teal-600 outline-none transition-all duration-200"
                     placeholder="City, Country"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Lead Score
+                  </label>
+                  <input
+                    type="number"
+                    name="score"
+                    value={formData.score}
+                    onChange={handleChange}
+                    min="0"
+                    max="100"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-600 focus:border-teal-600 outline-none transition-all duration-200"
+                    placeholder="Enter score (0-100)"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mt-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Assigned User
+                  </label>
+                  <select
+                    name="assignedUserId"
+                    value={formData.assignedUserId}
+                    onChange={handleChange}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-600 focus:border-teal-600 outline-none transition-all duration-200"
+                  >
+                    <option value="">Select assigned user</option>
+                    {users.filter(user => user.role === 'sales_rep' && user.isActive).map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name} ({user.location})
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
@@ -340,9 +505,7 @@ const LeadCaptureForm = ({ onClose }) => {
                     <option value="chinese">Chinese</option>
                   </select>
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 mt-4">
+                
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Product Interest
@@ -570,9 +733,14 @@ const LeadCaptureForm = ({ onClose }) => {
               </button>
               <button
                 type="submit"
-                className="px-4 py-3 bg-teal-600 hover:bg-teal-700 text-white font-medium rounded-lg transition-colors"
+                disabled={isLoading}
+                className={`px-4 py-3 font-medium rounded-lg transition-colors ${
+                  isLoading 
+                    ? 'bg-gray-400 cursor-not-allowed' 
+                    : 'bg-teal-600 hover:bg-teal-700'
+                } text-white`}
               >
-                Add Lead
+                {isLoading ? 'Creating Lead...' : 'Add Lead'}
               </button>
             </div>
           </form>

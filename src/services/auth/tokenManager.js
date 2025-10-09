@@ -180,8 +180,19 @@ export const hasRefreshToken = () => {
  */
 export const getTokenExpiresAt = () => {
   const storage = getStorage();
-  const expiresAt = storage.getItem(TOKEN_KEYS.TOKEN_EXPIRES_AT);
-  return expiresAt ? parseInt(expiresAt) : null;
+  const expiresAtRaw = storage.getItem(TOKEN_KEYS.TOKEN_EXPIRES_AT);
+  const expiresAt = expiresAtRaw ? parseInt(expiresAtRaw) : null;
+  
+  // DEBUG: Token expiration timestamp debugging
+  console.log('[TokenManager] 📅 GET TOKEN EXPIRES AT:', {
+    storageKey: TOKEN_KEYS.TOKEN_EXPIRES_AT,
+    rawValue: expiresAtRaw,
+    parsedValue: expiresAt,
+    isValid: !!(expiresAtRaw && !isNaN(parseInt(expiresAtRaw))),
+    storageType: storage === localStorage ? 'localStorage' : 'sessionStorage'
+  });
+  
+  return expiresAt;
 };
 
 /**
@@ -200,9 +211,24 @@ export const getTokenTimestamp = () => {
  */
 export const isTokenExpired = () => {
   const expiresAt = getTokenExpiresAt();
+  
+  // DEBUG: Enhanced token expiration debugging
+  const currentTime = Date.now();
+  const isExpired = !expiresAt ? true : currentTime >= expiresAt;
+  
+  console.log('[TokenManager] 🕒 TOKEN EXPIRATION CHECK:', {
+    hasExpiresAt: !!expiresAt,
+    expiresAt,
+    currentTime,
+    timeUntilExpiry: expiresAt ? (expiresAt - currentTime) : 'N/A',
+    timeUntilExpirySeconds: expiresAt ? Math.floor((expiresAt - currentTime) / 1000) : 'N/A',
+    isExpired,
+    reason: !expiresAt ? 'NO_EXPIRES_AT' : currentTime >= expiresAt ? 'TIME_EXCEEDED' : 'VALID'
+  });
+  
   if (!expiresAt) return true;
   
-  return Date.now() >= expiresAt;
+  return currentTime >= expiresAt;
 };
 
 /**
@@ -448,17 +474,25 @@ export const setupTokenCleanup = () => {
   
   // Set up periodic cleanup and refresh check for expired tokens
   const cleanupInterval = setInterval(() => {
+    console.log('[TokenManager] 🔄 PERIODIC CLEANUP CHECK - Starting scheduled token cleanup...');
+    
     if (hasAccessToken()) {
+      console.log('[TokenManager] 🔍 Token found, checking expiration...');
+      
       if (isTokenExpired()) {
-        console.log('[TokenManager] Token expired, clearing tokens');
+        console.log('[TokenManager] 🚨 TOKEN EXPIRED IN PERIODIC CLEANUP - Clearing tokens and dispatching event!');
         clearTokens();
         // Dispatch event to trigger logout
         window.dispatchEvent(new CustomEvent('auth:token-expired'));
       } else if (shouldRefreshToken()) {
-        console.log('[TokenManager] Token needs refresh');
+        console.log('[TokenManager] 🔄 Token needs refresh');
         // Dispatch event to trigger refresh
         window.dispatchEvent(new CustomEvent('auth:token-needs-refresh'));
+      } else {
+        console.log('[TokenManager] ✅ Token is valid in periodic check');
       }
+    } else {
+      console.log('[TokenManager] ℹ️ No token found in periodic cleanup');
     }
   }, 30000); // Check every 30 seconds
   

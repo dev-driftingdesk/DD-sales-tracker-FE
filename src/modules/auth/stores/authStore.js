@@ -247,23 +247,32 @@ const useAuthStore = create(
 
       // Check authentication status with simplified, reliable logic
       checkAuthStatus: async () => {
-        console.log('[AuthStore] 🔍 Starting auth status check...');
+        console.log('🔍 [AuthStore] STARTING AUTH STATUS CHECK - Someone called checkAuthStatus!', {
+          callStack: new Error().stack,
+          timestamp: new Date().toISOString()
+        });
         
         // DEBUG: Check token status in detail
         const hasToken = tokenManager.hasAccessToken();
         const isExpired = tokenManager.isTokenExpired();
         const tokenUser = authService.getCurrentUser();
+        const authServiceResult = authService.isAuthenticated();
         
         console.log('[AuthStore] 📊 Token status check:', {
           hasToken,
           isExpired,
           tokenUser: tokenUser?.email,
-          isAuthenticated: authService.isAuthenticated()
+          authServiceResult,
+          willLogout: !authServiceResult
         });
         
         // Check if we have a valid token locally
-        if (!authService.isAuthenticated()) {
-          console.log('[AuthStore] ❌ No valid token found locally - clearing auth state');
+        if (!authServiceResult) {
+          console.log('🚨 [AuthStore] AUTH SERVICE SAYS NOT AUTHENTICATED - LOGGING OUT USER!', {
+            hasToken,
+            isExpired,
+            reason: isExpired ? 'TOKEN_EXPIRED' : hasToken ? 'TOKEN_INVALID' : 'NO_TOKEN'
+          });
           set({
             user: null,
             isAuthenticated: false,

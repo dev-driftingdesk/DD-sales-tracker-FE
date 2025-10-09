@@ -1,0 +1,329 @@
+---
+type: "Medium PRB"
+id: "TEAM-MANAGEMENT-API-INTEGRATION-PRB-001"
+title: "Team Management API Integration - Comprehensive Integration Plan"
+created_at: "2025-01-08"
+priority: "HIGH"
+complexity_points: 12
+estimated_hours: 16
+category: "api-integration"
+module: "team-management"
+parent_story: "TEAM-MANAGEMENT-API-INTEGRATION"
+
+# Team Management API Integration - Comprehensive Integration Plan
+
+## Context
+
+**PROJECT SCOPE**: This PRB coordinates the comprehensive integration of team management module with live backend API endpoints, systematically replacing all mock data operations with real API calls.
+
+**CURRENT STATE**: 
+- Team management module exists with full UI functionality using mock Zustand store
+- Comprehensive API specification documented in backend-docs/API_REQUIREMENTS_SPECIFICATION.md
+- Section 8 (Team Management Module) defines 4 core endpoints with detailed schemas
+- Mock store contains: users, teams, invitations, permissions, and bulk operations
+- Existing API infrastructure includes: apiClient, error handling, authentication, and service patterns
+
+**SYSTEM NATURE**: CODE-BASED SYSTEM with React frontend integrating with .NET 9.0.304 Web API backend
+
+**PROJECT ROOT**: /Users/vevomalik/Desktop/DD-sales-tracker-FE
+
+**CRITICAL FILES**:
+- `/src/modules/team-management/stores/teamManagementStore.js` - Mock store requiring API integration (400 lines)
+- `/backend-docs/API_REQUIREMENTS_SPECIFICATION.md` - Complete API specifications (3100+ lines)
+- `/src/services/api/apiClient.js` - Base API client with auth/retry/error handling (389 lines)
+- `/src/services/contacts/contactService.js` - Reference implementation pattern (926 lines)
+
+**USER REQUIREMENTS**:
+- **Original Request**: Replace mock data in team management module with live API endpoints
+- **Work Type**: Backend API integration with systematic mock data replacement
+- **Success Criteria**: 
+  - All mock operations replaced with real API calls
+  - Maintain existing UI functionality without breaking changes
+  - Proper error handling and loading states
+  - Authentication integration working correctly
+  - Comprehensive testing coverage
+- **Scope Limits**: UI changes only if required for API integration, no design modifications
+
+## Assigned Roles
+
+**@PM**: Project coordination and integration planning (COORDINATION ONLY)
+**@Developer**: API service implementation and store integration 
+**@QA-Engineer**: Testing strategy and validation
+
+**@Backend-Architect**: Technical guidance for .NET Web API integration patterns
+
+## Requirements
+
+### Functional Requirements
+
+1. **API Service Layer Creation**
+   - Create comprehensive teamManagementApiService.js following contactService.js pattern
+   - Implement all 50+ operations from existing mock store
+   - Map to 4 documented API endpoints: GET /teams, POST /teams, PUT /teams/{id}, GET /teams/{id}/performance
+   - Include proper error handling, authentication, and retry logic
+
+2. **Store Modernization**
+   - Replace all mock data operations with API service calls
+   - Maintain existing store interface for UI compatibility
+   - Add proper loading states and error handling
+   - Implement optimistic updates where appropriate
+
+3. **Authentication Integration**
+   - Integrate with existing auth system via authStore
+   - Include JWT token in all requests
+   - Handle authentication errors appropriately
+   - Support user permission-based filtering
+
+4. **Data Mapping & Transformation**
+   - Create mapper functions for API request/response transformation
+   - Handle frontend/backend data format differences
+   - Ensure type safety and validation
+   - Support pagination and filtering
+
+5. **Testing Integration**
+   - Create comprehensive test suite following existing patterns
+   - Include unit tests for API service
+   - Integration tests for store operations
+   - End-to-end tests for critical workflows
+
+### Technical Requirements
+
+1. **Follow Existing Patterns**
+   - Use contactService.js as reference implementation
+   - Maintain consistent error handling patterns
+   - Follow established file structure and naming conventions
+   - Use existing API client infrastructure
+
+2. **Performance Optimization**
+   - Implement request caching where appropriate
+   - Use optimistic updates for better UX
+   - Handle large team datasets efficiently
+   - Minimize API calls through smart batching
+
+3. **Error Handling**
+   - Graceful fallback to mock data if API unavailable
+   - User-friendly error messages
+   - Proper logging for debugging
+   - Network failure resilience
+
+## API Specification Analysis
+
+### Core Endpoints (from API_REQUIREMENTS_SPECIFICATION.md Section 8)
+
+**8.1 GET /teams** - Comprehensive team retrieval with member details
+- Response includes: teams[], summary metrics, performance data
+- Complex nested data: members[], targets, territories, performance metrics
+- Requires mapping to current store structure
+
+**8.2 POST /teams** - Team creation with initial members (admin only)
+- Request validation for team data structure
+- Member assignment during creation
+- Permission-based access control
+
+**8.3 PUT /teams/{id}** - Team updates and membership management (admin/manager)
+- Support for partial updates
+- Member addition/removal operations
+- Territory and target updates
+
+**8.4 GET /teams/{id}/performance** - Detailed team performance metrics
+- Complex performance calculations
+- Historical data and trends
+- Member-level performance breakdown
+
+### Data Mapping Requirements
+
+**Frontend Store Structure → API Schema Mapping**:
+- Store users[] → API teams[].members[] with expanded user data
+- Store teams[] → API teams[] with additional metadata
+- Store invitations[] → Likely separate invitation endpoints (not in current spec)
+- Store permissions → API members[].role and permission system
+- Store bulk operations → Multiple API calls or bulk endpoint creation
+
+## Implementation Strategy
+
+### Phase 1: Foundation (4 hours)
+1. **API Service Creation**
+   - Create `/src/services/team-management/teamManagementApiService.js`
+   - Implement base service structure following contactService pattern
+   - Set up error handling and authentication integration
+   - Create initial API endpoint mappings
+
+2. **Data Mapping Functions**
+   - Create `/src/services/api/teamManagementMapper.js`
+   - Implement request/response transformation functions
+   - Handle frontend ↔ backend data format differences
+   - Support complex nested data structures
+
+### Phase 2: Core Operations (6 hours)
+1. **Teams Management**
+   - Implement getTeams() with filtering and pagination
+   - Replace createTeam() mock with API call
+   - Implement updateTeam() with member management
+   - Add getTeamPerformance() for analytics
+
+2. **User Management Integration**
+   - Map user operations to team member management
+   - Implement user-team relationship handling
+   - Support role-based permissions
+   - Handle user filtering by team membership
+
+### Phase 3: Store Integration (4 hours)
+1. **Store Modernization**
+   - Replace mock operations in teamManagementStore.js
+   - Maintain existing interface for UI compatibility
+   - Add loading states for async operations
+   - Implement error handling and user feedback
+
+2. **Optimistic Updates**
+   - Implement optimistic updates for better UX
+   - Handle rollback on API failures
+   - Balance performance with data consistency
+   - Cache frequently accessed data
+
+### Phase 4: Testing & Validation (2 hours)
+1. **Test Suite Creation**
+   - Unit tests for API service functions
+   - Integration tests for store operations
+   - Mock API responses for consistent testing
+   - Error scenario testing
+
+2. **Integration Validation**
+   - End-to-end testing of critical workflows
+   - Performance testing with large datasets
+   - Authentication error handling validation
+   - Cross-browser compatibility testing
+
+## Quality Gates
+
+### Code Quality
+- [ ] TypeScript/JSDoc documentation for all API functions
+- [ ] Consistent error handling across all operations
+- [ ] Performance optimization for large team datasets
+- [ ] Security best practices for API integration
+
+### Testing
+- [ ] 90%+ code coverage for API service layer
+- [ ] All existing UI functionality working without changes
+- [ ] Error scenarios properly handled and tested
+- [ ] Authentication integration fully functional
+
+### Integration
+- [ ] All mock operations successfully replaced with API calls
+- [ ] No breaking changes to existing UI components
+- [ ] Proper loading states and user feedback
+- [ ] Data consistency between frontend and backend
+
+## Files to Modify
+
+### New Files
+- `/src/services/team-management/teamManagementApiService.js` - Main API service
+- `/src/services/api/teamManagementMapper.js` - Data transformation functions
+- `/src/tests/services/teamManagementApiService.test.js` - Test suite
+
+### Modified Files
+- `/src/modules/team-management/stores/teamManagementStore.js` - Replace mock with API calls
+- `/src/services/api/index.js` - Add team management endpoints
+- `/src/services/api/config.js` - Add team management API configuration
+
+## Risk Assessment & Mitigation
+
+### High Risk Areas
+1. **Complex Data Mapping** 
+   - Risk: Frontend/backend data structure mismatches
+   - Mitigation: Comprehensive mapper functions with validation
+
+2. **Performance Impact**
+   - Risk: API calls slower than mock data
+   - Mitigation: Caching, optimistic updates, pagination
+
+3. **Authentication Dependencies**
+   - Risk: Auth failures breaking functionality
+   - Mitigation: Graceful error handling, fallback patterns
+
+### Medium Risk Areas
+1. **API Specification Gaps**
+   - Risk: Missing endpoints for some mock operations
+   - Mitigation: Document gaps, implement workarounds or request backend changes
+
+2. **Testing Complexity**
+   - Risk: Difficult to test API integration
+   - Mitigation: Comprehensive mocking, test environment setup
+
+## Dependencies
+
+### Internal Dependencies
+- Existing API client infrastructure must be functional
+- Authentication system must be working correctly  
+- Error handling patterns must be established
+- Test framework must be configured
+
+### External Dependencies
+- Backend API endpoints must be implemented and available
+- Authentication endpoints must be functional
+- Database must be properly configured
+- API documentation must be accurate and complete
+
+## Success Criteria
+
+1. **Complete Mock Replacement**
+   - All mock data operations replaced with API calls
+   - No loss of functionality from user perspective
+   - Proper error handling for all scenarios
+
+2. **Performance Maintained**
+   - Page load times comparable to mock implementation
+   - Responsive UI during API operations
+   - Efficient data loading and caching
+
+3. **Quality Standards**
+   - 90%+ test coverage
+   - No breaking changes to UI components
+   - Comprehensive error handling
+   - Security best practices followed
+
+4. **Integration Quality**
+   - Authentication working correctly
+   - Proper user permissions enforcement
+   - Data consistency across operations
+   - Robust error recovery mechanisms
+
+## Documentation Requirements
+
+1. **API Integration Guide**
+   - Document integration patterns used
+   - Provide troubleshooting guide
+   - Include configuration requirements
+
+2. **Testing Documentation**
+   - Test strategy and coverage
+   - Mock data setup instructions
+   - Integration testing procedures
+
+3. **Deployment Notes**
+   - Environment configuration requirements
+   - Database migration needs (if any)
+   - Rollback procedures
+
+## Post-Implementation Tasks
+
+1. **Performance Monitoring**
+   - Monitor API response times
+   - Track error rates and patterns
+   - Identify optimization opportunities
+
+2. **User Feedback Collection**
+   - Gather feedback on any UX changes
+   - Monitor for reported issues
+   - Plan iterative improvements
+
+3. **Documentation Updates**
+   - Update technical documentation
+   - Create API integration examples
+   - Maintain troubleshooting guides
+
+---
+
+**Generated on**: 2025-01-08
+**Estimated Completion**: 2025-01-10
+**Review Required**: @Backend-Architect for API integration patterns
+**Stakeholders**: Frontend Team, Backend Team, QA Team

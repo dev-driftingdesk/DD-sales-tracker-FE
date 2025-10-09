@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, Save, User, Mail, Phone, MapPin, Package, 
   Shield, Users, Check, AlertCircle, Eye, EyeOff,
-  Briefcase, Crown
+  Briefcase, Crown, UserCheck
 } from 'lucide-react';
 import useTeamManagementStore from '../stores/teamManagementStore';
+import useRoleBasedAccess from '../../../hooks/useRoleBasedAccess';
 import { 
   USER_ROLES, 
   ROLE_LABELS, 
@@ -15,18 +16,30 @@ import {
 } from '../constants';
 
 const UserForm = ({ user, onClose }) => {
-  const { createUser, updateUser, users, teams } = useTeamManagementStore();
+  const { createUser, updateUser, users, teams, assignManager } = useTeamManagementStore();
+  const { canAccess, hasPermission, userRole, getValidationRules } = useRoleBasedAccess();
   
   const [formData, setFormData] = useState({
+    // Enhanced fields
+    firstName: '',
+    lastName: '',
+    username: '',
+    phoneNumber: '',
+    
+    // Legacy fields for backward compatibility
     name: '',
     email: '',
     phone: '',
     role: USER_ROLES.SALES_REP,
     manager: '',
+    managerId: '',
     teams: [],
     regions: [],
     products: [],
-    commissionPercentage: 0
+    commissionPercentage: 0,
+    
+    // Enhanced invitation message
+    invitationMessage: ''
   });
   
   const [errors, setErrors] = useState({});
@@ -35,23 +48,52 @@ const UserForm = ({ user, onClose }) => {
   useEffect(() => {
     if (user) {
       setFormData({
-        name: user.name || '',
+        // Enhanced fields
+        firstName: user.firstName || user.name?.split(' ')[0] || '',
+        lastName: user.lastName || user.name?.split(' ').slice(1).join(' ') || '',
+        username: user.username || user.email?.split('@')[0] || '',
+        phoneNumber: user.phoneNumber || user.phone || '',
+        
+        // Legacy fields for backward compatibility
+        name: user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim(),
         email: user.email || '',
-        phone: user.phone || '',
+        phone: user.phone || user.phoneNumber || '',
         role: user.role || USER_ROLES.SALES_REP,
         manager: user.manager || '',
+        managerId: user.managerId || user.manager || '',
         teams: user.teams || [],
         regions: user.regions || [],
         products: user.products || [],
-        commissionPercentage: user.commissionPercentage || 0
+        commissionPercentage: user.commissionPercentage || 0,
+        
+        // Enhanced invitation message (only for new users)
+        invitationMessage: ''
       });
     }
   }, [user]);
 
   const validateForm = () => {
     const newErrors = {};
+    const validationRules = getValidationRules('user_form');
 
-    if (!formData.name.trim()) {
+    // Enhanced field validation
+    if (!formData.firstName.trim()) {
+      newErrors.firstName = 'First name is required';
+    }
+
+    if (!formData.lastName.trim()) {
+      newErrors.lastName = 'Last name is required';
+    }
+
+    if (!formData.username.trim()) {
+      newErrors.username = 'Username is required';
+    } else if (formData.username.length < 3) {
+      newErrors.username = 'Username must be at least 3 characters';
+    }
+
+    // Legacy name field for backward compatibility
+    const fullName = `${formData.firstName} ${formData.lastName}`.trim();
+    if (!fullName) {
       newErrors.name = 'Name is required';
     }
 
@@ -69,12 +111,36 @@ const UserForm = ({ user, onClose }) => {
       }
     }
 
-    if (formData.phone && !/^\+?\d{10,15}$/.test(formData.phone.replace(/[-\s()]/g, ''))) {
-      newErrors.phone = 'Invalid phone number format';
+    // Phone number validation
+    const phoneNumber = formData.phoneNumber || formData.phone;
+    if (phoneNumber && !/^\+?\d{10,15}$/.test(phoneNumber.replace(/[-\s()]/g, ''))) {
+      newErrors.phoneNumber = 'Invalid phone number format';
     }
 
     if (!formData.role) {
       newErrors.role = 'Role is required';
+    }
+
+    // Role-based validation
+    if (validationRules.canAssignRole && formData.role) {
+      // Check if user can assign this role based on their own role
+      const roleHierarchy = {
+        [USER_ROLES.ADMIN]: 3,
+        [USER_ROLES.MANAGER]: 2,
+        [USER_ROLES.SALES_REP]: 1
+      };
+      
+      const userLevel = roleHierarchy[userRole] || 0;
+      const assigningLevel = roleHierarchy[formData.role] || 0;
+      
+      if (assigningLevel > userLevel) {
+        newErrors.role = `You cannot assign a role higher than your own (${userRole})`;
+      }
+    }
+
+    // Manager assignment validation
+    if (formData.managerId && !validationRules.canAssignManager) {
+      newErrors.managerId = 'You do not have permission to assign managers';
     }
 
     if (formData.regions.length === 0) {
@@ -109,15 +175,80 @@ const UserForm = ({ user, onClose }) => {
     setIsSubmitting(true);
 
     try {
+      // Prepare enhanced user data
+      const enhancedUserData = {
+        // Enhanced fields
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        username: formData.username,
+        phoneNumber: formData.phoneNumber,
+        
+        // Legacy fields for backward compatibility
+        name: `${formData.firstName} ${formData.lastName}`.trim(),
+        email: formData.email,
+        phone: formData.phoneNumber || formData.phone,
+        role: formData.role,
+        managerId: formData.managerId || formData.manager,
+        teams: formData.teams,
+        regions: formData.regions,
+        products: formData.products,
+        commissionPercentage: formData.commissionPercentage,
+        
+        // Enhanced invitation message for new users
+        invitationMessage: formData.invitationMessage || 
+          `Welcome to our team! You've been invited to join as a ${ROLE_LABELS[formData.role]}.`
+      };
+
       if (user) {
-        updateUser(user.id, formData);
+        // Update existing user
+        await updateUser(user.id, enhancedUserData);
+        
+        // If manager is being assigned and user has permission
+        if (enhancedUserData.managerId && enhancedUserData.managerId !== user.managerId && canAccess('assign_manager_dropdown')) {
+          await assignManager(user.id, enhancedUserData.managerId);
+        }
+        
+        onClose();
       } else {
-        createUser(formData);
+        // For new users, an invitation is sent instead of direct creation
+        console.log('🔐 Enhanced UserForm - Creating user with enhanced data:', enhancedUserData);
+        
+        const result = await createUser(enhancedUserData);
+        
+        if (result.type === 'invitation_sent') {
+          // Show success message about invitation
+          alert(`✅ ${result.message}`);
+          onClose();
+        }
       }
-      onClose();
     } catch (error) {
       console.error('Error saving user:', error);
-      setErrors({ submit: 'Failed to save user. Please try again.' });
+      
+      // Check if we're still authenticated after the error
+      const tokenStillPresent = !!(localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token'));
+      console.log('🔍 [UserForm] After error - Auth token still present:', tokenStillPresent);
+      
+      // Add a small delay and check again
+      setTimeout(() => {
+        const tokenAfterDelay = !!(localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token'));
+        console.log('🔍 [UserForm] After 100ms delay - Auth token still present:', tokenAfterDelay);
+        if (!tokenAfterDelay) {
+          console.log('⚠️ [UserForm] Token was removed after the error - logout happened asynchronously!');
+        }
+      }, 100);
+      
+      let errorMessage = 'Failed to save user. Please try again.';
+      
+      // Enhanced error handling
+      if (error.message.includes('Access denied')) {
+        errorMessage = 'You do not have permission to perform this action.';
+      } else if (error.message.includes('Admin role')) {
+        errorMessage = 'Only administrators can perform this action.';
+      } else if (error.message.includes('Manager role')) {
+        errorMessage = 'Only managers and administrators can perform this action.';
+      }
+      
+      setErrors({ submit: errorMessage });
     } finally {
       setIsSubmitting(false);
     }
@@ -170,11 +301,17 @@ const UserForm = ({ user, onClose }) => {
                 <User className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-white">
-                  {user ? 'Edit User' : 'Add New User'}
+                <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                  {user ? 'Edit User' : 'Invite New User'}
+                  <span className="text-xs bg-white/20 px-2 py-1 rounded-lg font-normal">
+                    Enhanced API
+                  </span>
                 </h2>
                 <p className="text-white/80 text-sm">
-                  {user ? 'Update user information and permissions' : 'Create a new team member'}
+                  {user 
+                    ? 'Update user information with role-based permissions' 
+                    : 'Send an invitation with enhanced user fields and team assignments'
+                  }
                 </p>
               </div>
             </div>
@@ -190,29 +327,89 @@ const UserForm = ({ user, onClose }) => {
         <form onSubmit={handleSubmit} className="p-6 space-y-6 overflow-y-auto max-h-[calc(90vh-120px)]">
           {/* Basic Information */}
           <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-6 border border-gray-100">
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
-                <User className="w-5 h-5 text-white" />
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
+                  <User className="w-5 h-5 text-white" />
+                </div>
+                Basic Information
+                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-lg font-medium">
+                  Enhanced Fields
+                </span>
+              </h3>
+              
+              {/* Role-based access indicator */}
+              <div className="text-xs text-gray-500">
+                <span className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  {userRole} Access
+                </span>
               </div>
-              Basic Information
-            </h3>
+            </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Full Name *
+                  First Name *
                 </label>
                 <input
                   type="text"
-                  value={formData.name}
-                  onChange={(e) => handleChange('name', e.target.value)}
+                  value={formData.firstName}
+                  onChange={(e) => {
+                    handleChange('firstName', e.target.value);
+                    // Update legacy name field
+                    handleChange('name', `${e.target.value} ${formData.lastName}`.trim());
+                  }}
                   className={`w-full px-4 py-3 bg-white border rounded-xl focus:ring-2 focus:ring-teal-600 focus:border-teal-600 outline-none transition-all ${
-                    errors.name ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                    errors.firstName ? 'border-red-300 bg-red-50' : 'border-gray-200'
                   }`}
-                  placeholder="Enter full name"
+                  placeholder="Enter first name"
                 />
-                {errors.name && (
-                  <p className="text-red-600 text-sm mt-1">{errors.name}</p>
+                {errors.firstName && (
+                  <p className="text-red-600 text-sm mt-1">{errors.firstName}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Last Name *
+                </label>
+                <input
+                  type="text"
+                  value={formData.lastName}
+                  onChange={(e) => {
+                    handleChange('lastName', e.target.value);
+                    // Update legacy name field
+                    handleChange('name', `${formData.firstName} ${e.target.value}`.trim());
+                  }}
+                  className={`w-full px-4 py-3 bg-white border rounded-xl focus:ring-2 focus:ring-teal-600 focus:border-teal-600 outline-none transition-all ${
+                    errors.lastName ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                  }`}
+                  placeholder="Enter last name"
+                />
+                {errors.lastName && (
+                  <p className="text-red-600 text-sm mt-1">{errors.lastName}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Username *
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={formData.username}
+                    onChange={(e) => handleChange('username', e.target.value)}
+                    className={`w-full pl-10 pr-4 py-3 bg-white border rounded-xl focus:ring-2 focus:ring-teal-600 focus:border-teal-600 outline-none transition-all ${
+                      errors.username ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                    }`}
+                    placeholder="Enter username"
+                  />
+                  <UserCheck className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                </div>
+                {errors.username && (
+                  <p className="text-red-600 text-sm mt-1">{errors.username}</p>
                 )}
               </div>
 
@@ -244,23 +441,32 @@ const UserForm = ({ user, onClose }) => {
                 <div className="relative">
                   <input
                     type="tel"
-                    value={formData.phone}
-                    onChange={(e) => handleChange('phone', e.target.value)}
+                    value={formData.phoneNumber}
+                    onChange={(e) => {
+                      handleChange('phoneNumber', e.target.value);
+                      // Update legacy phone field
+                      handleChange('phone', e.target.value);
+                    }}
                     className={`w-full pl-10 pr-4 py-3 bg-white border rounded-xl focus:ring-2 focus:ring-teal-600 focus:border-teal-600 outline-none transition-all ${
-                      errors.phone ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                      errors.phoneNumber ? 'border-red-300 bg-red-50' : 'border-gray-200'
                     }`}
                     placeholder="+1-555-0123"
                   />
                   <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                 </div>
-                {errors.phone && (
-                  <p className="text-red-600 text-sm mt-1">{errors.phone}</p>
+                {errors.phoneNumber && (
+                  <p className="text-red-600 text-sm mt-1">{errors.phoneNumber}</p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
                   Role *
+                  {!canAccess('manage_users_section') && (
+                    <span className="text-xs bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">
+                      Restricted
+                    </span>
+                  )}
                 </label>
                 <div className="relative">
                   <select
@@ -322,71 +528,263 @@ const UserForm = ({ user, onClose }) => {
               )}
             </div>
 
-            {/* Manager Selection */}
-            {formData.role !== USER_ROLES.ADMIN && (
+            {/* Manager Selection - Role-based visibility */}
+            {formData.role !== USER_ROLES.ADMIN && canAccess('assign_manager_dropdown') && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
                   Manager
+                  <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
+                    Authorized
+                  </span>
                 </label>
-                <select
-                  value={formData.manager}
-                  onChange={(e) => handleChange('manager', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-600 focus:border-teal-600 outline-none"
-                >
-                  <option value="">Select a manager</option>
-                  {potentialManagers.map(manager => (
-                    <option key={manager.id} value={manager.id}>
-                      {manager.name} ({ROLE_LABELS[manager.role]})
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <select
+                    value={formData.managerId || formData.manager}
+                    onChange={(e) => {
+                      handleChange('managerId', e.target.value);
+                      handleChange('manager', e.target.value); // Legacy compatibility
+                    }}
+                    className={`w-full pl-10 pr-4 py-3 bg-white border rounded-xl focus:ring-2 focus:ring-teal-600 focus:border-teal-600 outline-none transition-all appearance-none ${
+                      errors.managerId ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                    }`}
+                  >
+                    <option value="">Select a manager</option>
+                    {potentialManagers.map(manager => (
+                      <option key={manager.id} value={manager.id}>
+                        {manager.name} ({ROLE_LABELS[manager.role]})
+                      </option>
+                    ))}
+                  </select>
+                  <Crown className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                    <svg className="w-5 h-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                </div>
+                {errors.managerId && (
+                  <p className="text-red-600 text-sm mt-1">{errors.managerId}</p>
+                )}
+                <p className="text-gray-500 text-xs mt-1">
+                  Select a manager to supervise this user's activities and performance
+                </p>
+              </div>
+            )}
+
+            {/* Manager Assignment Not Available - Show when user doesn't have permission */}
+            {formData.role !== USER_ROLES.ADMIN && !canAccess('assign_manager_dropdown') && (
+              <div className="col-span-2">
+                <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl">
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <Shield className="w-4 h-4" />
+                    <span className="font-medium">Manager Assignment</span>
+                    <span className="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded">
+                      Permission Required
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    You need {USER_ROLES.MANAGER} or {USER_ROLES.ADMIN} privileges to assign managers
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Invitation Message - Only for new users */}
+            {!user && (
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Invitation Message
+                </label>
+                <div className="relative">
+                  <textarea
+                    value={formData.invitationMessage}
+                    onChange={(e) => handleChange('invitationMessage', e.target.value)}
+                    rows={3}
+                    className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-600 focus:border-teal-600 outline-none transition-all resize-none"
+                    placeholder="Welcome to our team! You've been invited to join as a team member..."
+                  />
+                  <Mail className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                </div>
+                <p className="text-gray-500 text-xs mt-1">
+                  This message will be included in the invitation email sent to the new user
+                </p>
               </div>
             )}
           </div>
 
-          {/* Team Assignment */}
-          <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-6 border border-gray-100">
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg flex items-center justify-center">
-                <Users className="w-5 h-5 text-white" />
-              </div>
-              Team Assignment
-            </h3>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Teams
-              </label>
-              <div className="grid grid-cols-2 gap-3 max-h-40 overflow-y-auto pr-2">
-                {teams.map(team => {
-                  const isSelected = formData.teams.includes(team.id);
-                  return (
-                    <label 
-                      key={team.id} 
-                      className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
-                        isSelected 
-                          ? 'bg-teal-50 border-teal-300 ring-1 ring-teal-300' 
-                          : 'bg-white border-gray-200 hover:bg-gray-50'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => handleArrayToggle('teams', team.id)}
-                        className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-600"
-                      />
-                      <div className="flex-1">
-                        <span className="font-medium text-gray-900">{team.name}</span>
-                        <span className="text-xs text-gray-500 block">
-                          {team.members?.length || 0} members
-                        </span>
+          {/* Team Assignment - Enhanced with multi-team support */}
+          {canAccess('add_team_member_button') && (
+            <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-6 border border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg flex items-center justify-center">
+                  <Users className="w-5 h-5 text-white" />
+                </div>
+                Team Assignment
+                <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-lg font-medium">
+                  Multi-Team Support
+                </span>
+              </h3>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Teams & Roles
+                </label>
+                <p className="text-gray-500 text-xs mb-4">
+                  Select teams and assign specific roles for this user in each team
+                </p>
+                
+                <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
+                  {teams.map(team => {
+                    // Check if team is selected (support both simple array and enhanced format)
+                    const isSelected = formData.teams.some(t => 
+                      typeof t === 'string' ? t === team.id : t.teamId === team.id
+                    );
+                    
+                    // Get current role for this team
+                    const currentTeamRole = formData.teams.find(t => 
+                      typeof t === 'object' && t.teamId === team.id
+                    )?.role || 'SalesRep';
+                    
+                    return (
+                      <div 
+                        key={team.id} 
+                        className={`p-4 rounded-lg border transition-all ${
+                          isSelected 
+                            ? 'bg-purple-50 border-purple-300 ring-1 ring-purple-300' 
+                            : 'bg-white border-gray-200 hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {
+                              const currentTeams = formData.teams;
+                              if (isSelected) {
+                                // Remove team (support both formats)
+                                const newTeams = currentTeams.filter(t => 
+                                  typeof t === 'string' ? t !== team.id : t.teamId !== team.id
+                                );
+                                handleChange('teams', newTeams);
+                              } else {
+                                // Add team with enhanced format
+                                const newTeam = {
+                                  teamId: team.id,
+                                  teamName: team.name,
+                                  role: 'SalesRep' // Default role
+                                };
+                                handleChange('teams', [...currentTeams, newTeam]);
+                              }
+                            }}
+                            className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-600 mt-1"
+                          />
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <span className="font-medium text-gray-900">{team.name}</span>
+                                <span className="text-xs text-gray-500 block">
+                                  {team.members?.length || 0} members
+                                </span>
+                              </div>
+                              
+                              {/* Role selector for selected teams */}
+                              {isSelected && (
+                                <div className="ml-4">
+                                  <select
+                                    value={currentTeamRole}
+                                    onChange={(e) => {
+                                      const newRole = e.target.value;
+                                      const updatedTeams = formData.teams.map(t => {
+                                        if (typeof t === 'object' && t.teamId === team.id) {
+                                          return { ...t, role: newRole };
+                                        } else if (typeof t === 'string' && t === team.id) {
+                                          // Convert simple format to enhanced format
+                                          return {
+                                            teamId: team.id,
+                                            teamName: team.name,
+                                            role: newRole
+                                          };
+                                        }
+                                        return t;
+                                      });
+                                      handleChange('teams', updatedTeams);
+                                    }}
+                                    className="text-xs px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-purple-600 outline-none bg-white"
+                                  >
+                                    <option value="SalesRep">Sales Rep</option>
+                                    <option value="Manager">Manager</option>
+                                    <option value="Admin">Admin</option>
+                                  </select>
+                                </div>
+                              )}
+                            </div>
+                            
+                            {/* Team description or additional info */}
+                            {team.description && (
+                              <p className="text-xs text-gray-400 mt-1">
+                                {team.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </label>
-                  );
-                })}
+                    );
+                  })}
+                </div>
+                
+                {formData.teams.length > 0 && (
+                  <div className="mt-4 p-3 bg-purple-50 rounded-lg">
+                    <p className="text-xs text-purple-700 font-medium mb-1">
+                      Selected Teams ({formData.teams.length}):
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {formData.teams.map((team, index) => {
+                        const teamName = typeof team === 'object' ? team.teamName : 
+                          teams.find(t => t.id === team)?.name || 'Unknown Team';
+                        const teamRole = typeof team === 'object' ? team.role : 'SalesRep';
+                        
+                        return (
+                          <span key={index} className="text-xs bg-white px-2 py-1 rounded-lg border border-purple-200">
+                            {teamName} ({teamRole})
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
-          </div>
+          )}
+
+          {/* Team Assignment Not Available - Show when user doesn't have permission */}
+          {!canAccess('add_team_member_button') && (
+            <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-6 border border-gray-100">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-gradient-to-br from-gray-400 to-gray-500 rounded-lg flex items-center justify-center">
+                  <Users className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-3">
+                    Team Assignment
+                    <span className="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded-lg font-medium">
+                      Permission Required
+                    </span>
+                  </h3>
+                </div>
+              </div>
+              
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
+                <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
+                  <Shield className="w-4 h-4" />
+                  <span className="font-medium">Team Management Access Required</span>
+                </div>
+                <p className="text-xs text-gray-500">
+                  You need {USER_ROLES.MANAGER} or {USER_ROLES.ADMIN} privileges to assign users to teams. 
+                  Contact your administrator to request team assignment permissions.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Regional Access */}
           <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-6 border border-gray-100">
@@ -494,7 +892,10 @@ const UserForm = ({ user, onClose }) => {
               ) : (
                 <>
                   <Save className="w-4 h-4" />
-                  {user ? 'Update User' : 'Create User'}
+                  {user ? 'Update User' : 'Send Invitation'}
+                  <span className="text-xs bg-white/20 px-1.5 py-0.5 rounded ml-2">
+                    Enhanced
+                  </span>
                 </>
               )}
             </button>

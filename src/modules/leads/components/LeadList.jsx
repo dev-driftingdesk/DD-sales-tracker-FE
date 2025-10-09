@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Search, Filter, ChevronRight, Phone, Mail, Calendar, MapPin, Package, DollarSign } from 'lucide-react';
 import useLeadStore from '../stores/leadStore';
 import useCRMStore from '../../crm-core/stores/crmStore';
@@ -14,11 +14,31 @@ const LeadList = ({ onSelectLead }) => {
     getFilteredLeads, 
     isLoading, 
     error,
-    fetchLeads 
+    fetchLeads,
+    fetchLead 
   } = useLeadStore();
   const { products } = useCRMStore();
   const { users } = useUserStore();
   const filteredLeads = getFilteredLeads();
+
+  // Fetch leads on component mount
+  useEffect(() => {
+    fetchLeads();
+  }, [fetchLeads]);
+
+  // Handle lead selection with API call
+  const handleSelectLead = async (lead) => {
+    try {
+      // Fetch complete lead data from backend
+      const detailedLead = await fetchLead(lead.id);
+      // Call the parent's onSelectLead with detailed data
+      onSelectLead(detailedLead);
+    } catch (error) {
+      console.error('Failed to fetch lead details:', error);
+      // Fallback to basic lead data if API call fails
+      onSelectLead(lead);
+    }
+  };
 
   const getAssociatedProduct = (productId) => {
     return products.find(product => product.id === productId);
@@ -139,7 +159,7 @@ const LeadList = ({ onSelectLead }) => {
               <div
                 key={lead.id}
                 className="px-6 py-4 hover:bg-gray-50 cursor-pointer transition-colors duration-200"
-                onClick={() => onSelectLead(lead)}
+                onClick={() => handleSelectLead(lead)}
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-3">

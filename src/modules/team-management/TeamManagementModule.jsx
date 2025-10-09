@@ -11,7 +11,7 @@ const TeamManagementModule = () => {
   // Initialize store on mount
   useEffect(() => {
     initialize();
-  }, [initialize]);
+  }, []); // Remove initialize dependency to prevent multiple calls
 
   const tabs = [
     { id: 'users', label: 'Users', icon: Users },

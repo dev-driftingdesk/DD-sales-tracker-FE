@@ -213,9 +213,24 @@ const createApiClient = () => {
             await refreshToken();
             config = addAuthHeader(config); // Re-add header with new token
           } catch (refreshError) {
-            // Token refresh failed, remove stored tokens
-            removeStoredToken();
-            // Continue with request (might be a public endpoint)
+            console.warn('[API Client] Token refresh failed:', {
+              error: refreshError.message,
+              status: refreshError.response?.status,
+              endpoint: refreshError.config?.url
+            });
+            
+            // Only remove token for authentication errors (401, 403)
+            // Keep token for network errors or missing endpoints (404, 500, etc.)
+            const isAuthError = refreshError.response?.status === 401 || 
+                               refreshError.response?.status === 403;
+            
+            if (isAuthError) {
+              console.log('[API Client] Removing token due to authentication error during refresh');
+              removeStoredToken();
+            } else {
+              console.log('[API Client] Keeping current token - refresh endpoint unavailable or network error');
+              // Keep existing token and continue with request
+            }
           }
         }
         
@@ -281,6 +296,17 @@ const createApiClient = () => {
       
       // Auto-logout on authentication errors
       if (apiError.requiresAuth()) {
+        console.log('🚨 AUTH INTERCEPTOR - Triggering automatic logout!', {
+          url: error.config?.url,
+          method: error.config?.method,
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          errorType: apiError.type,
+          errorMessage: apiError.message,
+          requiresAuth: apiError.requiresAuth(),
+          fullError: error.response?.data
+        });
+        
         removeStoredToken();
         // Dispatch custom event for auth state change
         window.dispatchEvent(new CustomEvent('auth:logout', { detail: apiError }));
